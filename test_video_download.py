@@ -9,7 +9,7 @@ import time
 from typing import Dict, Optional
 
 
-QUEUE_CHECK_INTERVAL = 180      # 排队时每3分钟查询一次
+QUEUE_CHECK_INTERVAL = 30       # 排队时每30秒查询一次
 DOWNLOAD_CHECK_INTERVAL = 300   # 可下载后每5分钟尝试下载一次
 DOWNLOAD_MAX_ATTEMPTS = 12      # 下载最多尝试12次
 

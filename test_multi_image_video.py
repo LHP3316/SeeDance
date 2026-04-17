@@ -5,9 +5,163 @@
 
 from jimeng_api_client import JimengAPIClient
 import os
+import time
+import types
+from typing import Dict, Optional
+
+
+QUEUE_CHECK_INTERVAL = 30       # 排队阶段：30秒
+DOWNLOAD_CHECK_INTERVAL = 300   # 下载阶段：5分钟
+DOWNLOAD_MAX_ATTEMPTS = 12      # 下载阶段最多12次
+
+
+def _get_history_data(client_obj: JimengAPIClient, target_history_id: str) -> Dict:
+    """通过 history_id 查询任务详情。"""
+    url = f"{client_obj.base_url}/mweb/v1/get_history_by_ids"
+    token_info = client_obj.token_manager.get_token('/mweb/v1/get_history_by_ids')
+    params = {
+        "aid": client_obj.aid,
+        "device_platform": "web",
+        "region": "cn",
+        "web_id": client_obj.token_manager.web_id,
+        "da_version": "3.3.12",
+        "web_component_open_flag": "1",
+        "web_version": "7.5.0",
+        "aigc_features": "app_lip_sync"
+    }
+    if token_info.get("msToken"):
+        params["msToken"] = token_info["msToken"]
+    if token_info.get("a_bogus"):
+        params["a_bogus"] = token_info["a_bogus"]
+
+    data = {
+        "history_ids": [target_history_id],
+        "image_info": {
+            "width": 2048,
+            "height": 2048,
+            "format": "webp",
+            "image_scene_list": [
+                {"scene": "normal", "width": 2400, "height": 2400, "uniq_key": "2400", "format": "webp"},
+                {"scene": "loss", "width": 1080, "height": 1080, "uniq_key": "1080", "format": "webp"},
+            ]
+        }
+    }
+
+    result = client_obj._send_request("POST", url, params=params, json=data)
+    if not result or result.get("ret") != "0":
+        raise RuntimeError(f"get_history_by_ids 请求失败: {result}")
+
+    history_data = result.get("data", {}).get(target_history_id, {})
+    if not history_data:
+        raise RuntimeError(f"未找到 history_id={target_history_id} 对应的数据")
+    return history_data
+
+
+def _extract_video_url(history_data: Dict) -> Optional[str]:
+    """从 history 数据里提取视频URL。"""
+    resources = history_data.get("resources", [])
+    for res in resources:
+        if res.get("type") == "video":
+            video_url = res.get("video_info", {}).get("video_url")
+            if video_url:
+                return video_url
+
+    item_list = history_data.get("item_list", [])
+    for item in item_list:
+        video_data = item.get("video", {})
+        if not video_data:
+            continue
+
+        transcoded = video_data.get("transcoded_video")
+        if isinstance(transcoded, dict):
+            for quality in ["origin", "720p", "480p", "360p"]:
+                if quality in transcoded:
+                    candidate = transcoded[quality].get("video_url")
+                    if candidate:
+                        return candidate
+
+        candidate = video_data.get("origin_video") or video_data.get("video_url")
+        if candidate:
+            return candidate
+
+    return None
+
+
+def _custom_poll_video_result_by_history(self, history_id: str, max_wait_time: int = 600,
+                                         check_interval: int = 10) -> Dict:
+    """
+    自定义轮询：
+    - 排队/处理中：每3分钟查一次（不走原10秒高频轮询）
+    - 查到可用URL即返回
+    """
+    del max_wait_time, check_interval
+    print("\n[自定义轮询] 启用排队低频轮询：每3分钟检查一次")
+
+    queue_round = 0
+    while True:
+        queue_round += 1
+        try:
+            history_data = _get_history_data(self, history_id)
+            status = history_data.get("status")
+            fail_code = history_data.get("fail_code")
+            pre_gen_item_ids = history_data.get("pre_gen_item_ids")
+            video_url = _extract_video_url(history_data)
+
+            print(f"[排队轮询 #{queue_round}] status={status}, fail_code={fail_code}, pre_gen_item_ids={pre_gen_item_ids}")
+
+            if fail_code:
+                return {"success": False, "error": f"任务失败: status={status}, fail_code={fail_code}"}
+
+            if status == 40:
+                fail_msg = history_data.get("fail_msg", "未知错误")
+                return {"success": False, "error": f"任务失败(status=40): {fail_msg}"}
+
+            if video_url:
+                print("[自定义轮询] 已拿到可用视频URL")
+                return {
+                    "success": True,
+                    "history_id": history_id,
+                    "url": video_url
+                }
+        except Exception as e:
+            print(f"[排队轮询 #{queue_round}] 查询异常: {e}")
+
+        print(f"[排队轮询] 继续等待，{QUEUE_CHECK_INTERVAL}秒后重试...")
+        time.sleep(QUEUE_CHECK_INTERVAL)
+
+
+def _download_with_retry(client_obj: JimengAPIClient, initial_video_url: str, history_id: Optional[str] = None) -> str:
+    """
+    下载重试：
+    - 每5分钟尝试下载一次
+    - 最多12次，超时退出
+    """
+    for attempt in range(1, DOWNLOAD_MAX_ATTEMPTS + 1):
+        print(f"\n[下载轮询 #{attempt}/{DOWNLOAD_MAX_ATTEMPTS}] 开始下载检查...")
+
+        video_url = initial_video_url
+        if history_id:
+            try:
+                latest_history = _get_history_data(client_obj, history_id)
+                latest_video_url = _extract_video_url(latest_history)
+                if latest_video_url:
+                    video_url = latest_video_url
+            except Exception as e:
+                print(f"[下载轮询 #{attempt}] 刷新video_url失败，继续使用已有URL: {e}")
+
+        saved_path = client_obj.download_video(video_url, save_dir="output_video")
+        if saved_path:
+            return saved_path
+
+        if attempt < DOWNLOAD_MAX_ATTEMPTS:
+            print(f"[下载轮询] 本次下载失败，{DOWNLOAD_CHECK_INTERVAL}秒后重试...")
+            time.sleep(DOWNLOAD_CHECK_INTERVAL)
+
+    raise TimeoutError(f"下载超时：{DOWNLOAD_MAX_ATTEMPTS}次均失败")
 
 # 您的sessionid
 client = JimengAPIClient(sessionid="eccb32e0b3ccbd3464dc0cc90dbcdca4")
+client._poll_video_result_by_history = types.MethodType(_custom_poll_video_result_by_history, client)
 
 print("=" * 60)
 print("多图引用视频生成测试")
@@ -75,11 +229,17 @@ if result["success"]:
     print("✅ 视频生成成功！")
     print(f"视频URL: {result['url']}")
     
-    # 下载视频
+    # 下载轮询：每5分钟一次，最多12次
     if 'url' in result:
-        saved_path = client.download_video(result["url"], save_dir="output_video")
-        if saved_path:
+        try:
+            saved_path = _download_with_retry(
+                client_obj=client,
+                initial_video_url=result["url"],
+                history_id=result.get("history_id")
+            )
             print(f"视频已保存到: {saved_path}")
+        except Exception as e:
+            print(f"❌ 视频下载失败: {e}")
 else:
     print(f"❌ 视频生成失败: {result.get('error')}")
 
