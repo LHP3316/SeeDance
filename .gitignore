@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 测试输出
+test_output/
+output/
+output_video/
+
+# Cookie和配置文件（敏感信息）
+cookies.json
+config_schedule.yaml
+config_example.yaml
+
+# 日志
+*.log
+
+# 调试文件
+debug_*.py
+test_api_connection.py
+test_video_browser.py
+poll_task_status.py
+check_model.py

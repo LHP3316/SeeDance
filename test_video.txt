@@ -1,0 +1,20 @@
+from jimeng_api_client import JimengAPIClient
+
+client = JimengAPIClient(sessionid="eccb32e0b3ccbd3464dc0cc90dbcdca4")
+
+# 文生视频
+print("开始生成视频...")
+result = client.generate_text_to_video(
+    prompt="橘猫电影画质版，跟狸花猫打架，毛乱飞，天黑的情况下",
+    model="s2.0",
+    ratio="16:9",
+    duration=4
+)
+
+if result["success"]:
+    print(f"视频生成成功！")
+    print(f"视频URL: {result['url']}")
+    saved_path = client.download_video(result["url"], save_dir="output_video")
+    print(f"视频已保存到: {saved_path}")
+else:
+    print(f"视频生成失败: {result.get('error')}")
