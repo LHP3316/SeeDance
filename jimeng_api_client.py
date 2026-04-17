@@ -919,6 +919,344 @@ class JimengAPIClient:
         
         return saved_paths
     
+    def generate_multi_image_to_video(self, image_paths: List[str], 
+                                       prompt: str,
+                                       image_descriptions: List[str],
+                                       model: str = "s2.0", 
+                                       ratio: str = "16:9", 
+                                       duration: int = 4) -> Dict:
+        """
+        多图引用生成视频（支持本地图片路径）
+        
+        Args:
+            image_paths: 本地图片路径列表，如 ["C:/Users/Administrator/Desktop/奶奶.png", ...]
+            prompt: 提示词文本（不包含@引用，只包含纯文本描述）
+            image_descriptions: 每张图片的描述列表，如 ["是奶奶", "是狐小九", "是铁爪", "是包子铺内"]
+            model: 视频模型 (s2.0, s2.0p)
+            ratio: 视频比例 (16:9, 9:16, 1:1, 4:3, 3:4)
+            duration: 视频时长（秒），默认4秒
+            
+        Returns:
+            {
+                "success": bool,
+                "history_id": str,
+                "url": str,  # 视频URL
+                "error": str
+            }
+            
+        Example:
+            >>> client.generate_multi_image_to_video(
+            ...     image_paths=[
+            ...         "C:/Users/Administrator/Desktop/奶奶.png",
+            ...         "C:/Users/Administrator/Desktop/狐小九.png",
+            ...         "C:/Users/Administrator/Desktop/铁爪.png",
+            ...         "C:/Users/Administrator/Desktop/包子铺内.png"
+            ...     ],
+            ...     prompt="赛璐璐风格动画，无字幕无配乐无标识，多景别运用，电影级运镜",
+            ...     image_descriptions=["是奶奶", "是狐小九", "是铁爪", "是包子铺内"],
+            ...     model="s2.0",
+            ...     ratio="16:9",
+            ...     duration=4
+            ... )
+        """
+        try:
+            print(f"\n[1/4] 开始多图引用视频生成...")
+            print(f"  - 图片数量: {len(image_paths)}")
+            print(f"  - 提示词: {prompt}")
+            print(f"  - 图片描述: {image_descriptions}")
+            print(f"  - 模型: {model}")
+            print(f"  - 比例: {ratio}")
+            print(f"  - 时长: {duration}秒")
+            logger.info(f"[Jimeng] 开始多图引用视频生成 - 图片数量: {len(image_paths)}")
+            
+            # 验证参数
+            if len(image_paths) != len(image_descriptions):
+                return {
+                    "success": False,
+                    "error": f"图片数量({len(image_paths)})与描述数量({len(image_descriptions)})不匹配"
+                }
+            
+            if len(image_paths) > 12:
+                return {
+                    "success": False,
+                    "error": "最多支持12张图片"
+                }
+            
+            # 模型配置
+            model_map = {
+                "s2.0": "dreamina_seedance_40_vision",
+                "s2.0p": "dreamina_seedance_40_vision"
+            }
+            model_req_key = model_map.get(model, "dreamina_seedance_40_vision")
+            
+            duration_ms = duration * 1000
+            if duration_ms not in [4000, 5000]:
+                duration_ms = 4000
+            
+            # 生成UUID
+            submit_id = str(uuid.uuid4())
+            draft_id = str(uuid.uuid4())
+            component_id = str(uuid.uuid4())
+            ability_id = str(uuid.uuid4())
+            gen_video_id = str(uuid.uuid4())
+            text_to_video_id = str(uuid.uuid4())
+            video_gen_input_id = str(uuid.uuid4())
+            unified_edit_id = str(uuid.uuid4())
+            
+            # 上传图片到即梦平台
+            print(f"\n[2/4] 正在上传图片...")
+            upload_token = self._get_upload_token()
+            if not upload_token:
+                return {"success": False, "error": "获取上传token失败"}
+            
+            # 上传所有图片并收集URI
+            material_list = []
+            for i, img_path in enumerate(image_paths):
+                print(f"  上传第 {i+1}/{len(image_paths)} 张图片: {img_path}")
+                image_uri = self._upload_image(img_path, upload_token)
+                if not image_uri:
+                    return {"success": False, "error": f"上传图片失败: {img_path}"}
+                
+                # 获取图片元数据
+                try:
+                    from PIL import Image
+                    with Image.open(img_path) as im:
+                        width, height = im.size
+                        fmt = (im.format or "").lower()
+                except Exception:
+                    width, height, fmt = 0, 0, ""
+                
+                # 构造material_list项
+                material_item = {
+                    "type": "",
+                    "id": str(uuid.uuid4()),
+                    "material_type": "image",
+                    "image_info": {
+                        "type": "image",
+                        "id": str(uuid.uuid4()),
+                        "source_from": "upload",
+                        "platform_type": 1,
+                        "name": "",
+                        "image_uri": image_uri,
+                        "aigc_image": {
+                            "type": "",
+                            "id": str(uuid.uuid4())
+                        },
+                        "width": width,
+                        "height": height,
+                        "format": fmt,
+                        "uri": image_uri
+                    }
+                }
+                material_list.append(material_item)
+                print(f"    ✓ 上传成功，URI: {image_uri}")
+            
+            print(f"\n[3/4] 构造请求数据...")
+            
+            # 构造meta_list（文本和图片引用交替）
+            meta_list = []
+            
+            # 先添加主提示词
+            if prompt:
+                meta_list.append({
+                    "type": "",
+                    "id": str(uuid.uuid4()),
+                    "meta_type": "text",
+                    "text": prompt
+                })
+            
+            # 然后交替添加图片和描述
+            for i, (material, desc) in enumerate(zip(material_list, image_descriptions)):
+                # 添加图片引用
+                meta_list.append({
+                    "type": "",
+                    "id": str(uuid.uuid4()),
+                    "meta_type": "image",
+                    "text": "",
+                    "material_ref": {
+                        "type": "",
+                        "id": str(uuid.uuid4()),
+                        "material_idx": i + 1  # 从1开始索引
+                    }
+                })
+                
+                # 添加图片描述
+                if desc:
+                    meta_list.append({
+                        "type": "",
+                        "id": str(uuid.uuid4()),
+                        "meta_type": "text",
+                        "text": desc
+                    })
+            
+            # 使用与浏览器相同的API端点
+            url = f"{self.base_url}/mweb/v1/aigc_draft/generate"
+            
+            babi_param = {
+                "scenario": "image_video_generation",
+                "feature_key": "aigc_to_video",
+                "feature_entrance": "to_video",
+                "feature_entrance_detail": "to_video-text_to_video"
+            }
+            
+            # 构建draft_content（与浏览器一致的结构）
+            draft_content = {
+                "type": "draft",
+                "id": draft_id,
+                "min_version": "3.3.9",
+                "min_features": ["AIGC_Video_UnifiedEdit"],
+                "is_from_tsn": True,
+                "version": "3.3.12",
+                "main_component_id": component_id,
+                "component_list": [{
+                    "type": "video_base_component",
+                    "id": component_id,
+                    "min_version": "1.0.0",
+                    "aigc_mode": "workbench",
+                    "metadata": {
+                        "type": "",
+                        "id": str(uuid.uuid4()),
+                        "created_platform": 3,
+                        "created_platform_version": "",
+                        "created_time_in_ms": str(int(time.time() * 1000)),
+                        "created_did": ""
+                    },
+                    "generate_type": "gen_video",
+                    "abilities": {
+                        "type": "",
+                        "id": ability_id,
+                        "gen_video": {
+                            "type": "",
+                            "id": gen_video_id,
+                            "text_to_video_params": {
+                                "type": "",
+                                "id": text_to_video_id,
+                                "video_gen_inputs": [{
+                                    "type": "",
+                                    "id": video_gen_input_id,
+                                    "min_version": "3.3.9",
+                                    "prompt": "",
+                                    "video_mode": 2,
+                                    "fps": 24,
+                                    "duration_ms": duration_ms,
+                                    "idip_meta_list": [],
+                                    "unified_edit_input": {
+                                        "type": "",
+                                        "id": unified_edit_id,
+                                        "material_list": material_list,
+                                        "meta_list": meta_list
+                                    }
+                                }],
+                                "video_aspect_ratio": ratio,
+                                "seed": random.randint(1000000000, 9999999999),
+                                "model_req_key": model_req_key,
+                                "priority": 0
+                            },
+                            "video_task_extra": json.dumps({
+                                "isDefaultSeed": 1,
+                                "originSubmitId": submit_id,
+                                "isRegenerate": False,
+                                "enterFrom": "click",
+                                "position": "page_bottom_box",
+                                "functionMode": "omni_reference"
+                            })
+                        }
+                    },
+                    "process_type": 1
+                }]
+            }
+            
+            data = {
+                "extend": {
+                    "root_model": model_req_key,
+                    "workspace_id": 0,
+                    "m_video_commerce_info": {
+                        "benefit_type": "seedance_20_fast_720p_output",
+                        "resource_id": "generate_video",
+                        "resource_id_type": "str",
+                        "resource_sub_type": "aigc"
+                    },
+                    "m_video_commerce_info_list": [{
+                        "benefit_type": "seedance_20_fast_720p_output",
+                        "resource_id": "generate_video",
+                        "resource_id_type": "str",
+                        "resource_sub_type": "aigc"
+                    }]
+                },
+                "submit_id": submit_id,
+                "metrics_extra": json.dumps({
+                    "promptSource": "custom",
+                    "originSubmitId": submit_id,
+                    "isDefaultSeed": 1,
+                    "originTemplateId": "",
+                    "imageNameMapping": {},
+                    "isUseAiGenPrompt": False,
+                    "batchNumber": 1,
+                    "enterFrom": "click",
+                    "position": "page_bottom_box",
+                    "functionMode": "omni_reference"
+                }),
+                "draft_content": json.dumps(draft_content),
+                "http_common_info": {"aid": self.aid}
+            }
+            
+            token_info = self.token_manager.get_token('/mweb/v1/aigc_draft/generate')
+            params = {
+                "babi_param": json.dumps(babi_param),
+                "aid": self.aid,
+                "device_platform": "web",
+                "region": "cn",
+                "web_id": self.token_manager.web_id,
+                "da_version": "3.3.12",
+                "web_component_open_flag": "1",
+                "commerce_with_input_video": "1",
+                "web_version": "7.5.0",
+                "aigc_features": "app_lip_sync"
+            }
+            
+            if token_info.get("msToken"):
+                params["msToken"] = token_info["msToken"]
+            if token_info.get("a_bogus"):
+                params["a_bogus"] = token_info["a_bogus"]
+            
+            headers, _ = self.token_manager.get_headers(
+                '/mweb/v1/aigc_draft/generate',
+                referer='https://jimeng.jianying.com/ai-tool/generate?type=video',
+                token_info=token_info
+            )
+            
+            print(f"\n[4/4] 发送API请求...")
+            response = self._send_request("POST", url, params=params, json=data, headers=headers)
+            
+            if not response or str(response.get('ret')) != '0':
+                logger.error(f"[Jimeng] 多图视频生成失败: {response}")
+                return {
+                    "success": False,
+                    "error": f"API返回错误: {response}"
+                }
+            
+            # 获取history_id
+            history_id = response.get('data', {}).get('aigc_data', {}).get('history_record_id')
+            if not history_id:
+                return {
+                    "success": False,
+                    "error": "未获取到history_id"
+                }
+            
+            print(f"\n[SUCCESS] 多图视频任务提交成功！")
+            print(f"  - history_id: {history_id}")
+            logger.info(f"[Jimeng] 多图视频提交成功，history_id: {history_id}")
+            
+            # 轮询等待视频生成
+            return self._poll_video_result_by_history(history_id, max_wait_time=600, check_interval=10)
+            
+        except Exception as e:
+            logger.error(f"[Jimeng] 多图视频生成异常: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
     def generate_text_to_video(self, prompt: str, model: str = "s2.0", 
                                 ratio: str = "16:9", duration: int = 4) -> Dict:
         """
@@ -1367,8 +1705,8 @@ class JimengAPIClient:
                 if fail_code:
                     print(f"  - 错误代码: {fail_code}")
                 
-                # 状态30: 完成
-                if status == 30:
+                # 状态30或50: 完成（视频和图片可能不同）
+                if status in [30, 50]:
                     # 如果有fail_code，说明失败了
                     if fail_code:
                         fail_msg = history_data.get("fail_starling_message", history_data.get("fail_msg", "未知错误"))
