@@ -16,7 +16,7 @@ class TaskCreate(BaseModel):
     prompt: str
     model: str
     ratio: str
-    duration: Optional[int] = None
+    duration: int = 4  # 视频时长（秒），默认4秒
     resolution: Optional[str] = None
     image_size: Optional[str] = None
     schedule_type: str = "manual"

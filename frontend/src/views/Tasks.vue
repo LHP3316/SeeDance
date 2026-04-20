@@ -184,7 +184,7 @@
     <el-dialog
       v-model="videoDialogVisible"
       title="新建视频任务"
-      width="600px"
+      width="700px"
     >
       <el-form :model="videoForm" :rules="videoRules" ref="videoFormRef" label-width="100px">
         <el-form-item label="任务名称" prop="name">
@@ -222,6 +222,26 @@
             <el-option label="9秒" :value="9" />
             <el-option label="10秒" :value="10" />
           </el-select>
+        </el-form-item>
+
+        <el-form-item label="上传图片">
+          <el-upload
+            ref="videoUploadRef"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :on-success="handleVideoUploadSuccess"
+            :on-remove="handleVideoRemoveFile"
+            :on-exceed="handleVideoExceed"
+            :file-list="videoForm.uploadedFiles"
+            multiple
+            :limit="12"
+            list-type="picture-card"
+            accept="image/*"
+            :class="{ 'hide-upload': videoForm.uploadedFiles.length >= 12 }"
+          >
+            <el-icon><Plus /></el-icon>
+          </el-upload>
+          <div class="upload-tip">支持jpg/png格式，最多12张</div>
         </el-form-item>
 
         <el-form-item label="提示词" prop="prompt">
@@ -282,26 +302,6 @@
               </el-icon>
             </span>
           </div>
-        </el-form-item>
-
-        <el-form-item label="上传图片">
-          <el-upload
-            ref="videoUploadRef"
-            :action="uploadUrl"
-            :headers="uploadHeaders"
-            :on-success="handleVideoUploadSuccess"
-            :on-remove="handleVideoRemoveFile"
-            :on-exceed="handleVideoExceed"
-            :file-list="videoForm.uploadedFiles"
-            multiple
-            :limit="12"
-            list-type="picture-card"
-            accept="image/*"
-            :class="{ 'hide-upload': videoForm.uploadedFiles.length >= 12 }"
-          >
-            <el-icon><Plus /></el-icon>
-          </el-upload>
-          <div class="upload-tip">支持jpg/png格式，最多12张</div>
         </el-form-item>
 
         <el-form-item label="执行时间" prop="scheduledTime">
