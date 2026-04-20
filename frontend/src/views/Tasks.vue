@@ -34,12 +34,12 @@
       width="800px"
       :close-on-click-modal="false"
     >
-      <el-form :model="imageForm" label-width="100px">
-        <el-form-item label="任务名称">
+      <el-form :model="imageForm" :rules="imageRules" ref="imageFormRef" label-width="100px">
+        <el-form-item label="任务名称" prop="name">
           <el-input v-model="imageForm.name" placeholder="请输入任务名称" />
         </el-form-item>
         
-        <el-form-item label="选择模型">
+        <el-form-item label="选择模型" prop="model">
           <el-select v-model="imageForm.model" placeholder="请选择模型" style="width: 100%">
             <el-option-group label="Seedream系列">
               <el-option label="图片5.0 Lite - 指令响应更精准" value="jimeng_5_0_lite" />
@@ -55,7 +55,7 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="图片比例">
+        <el-form-item label="图片比例" prop="ratio">
           <el-radio-group v-model="imageForm.ratio" class="ratio-group">
             <el-radio-button label="智能">智能</el-radio-button>
             <el-radio-button label="21:9">21:9</el-radio-button>
@@ -69,7 +69,7 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="分辨率">
+        <el-form-item label="分辨率" prop="resolution">
           <el-radio-group v-model="imageForm.resolution">
             <el-radio-button label="2K">高清 2K</el-radio-button>
             <el-radio-button label="4K">超清 4K</el-radio-button>
@@ -94,7 +94,7 @@
           <div class="upload-tip">支持jpg/png格式，最多10张</div>
         </el-form-item>
 
-        <el-form-item label="提示词">
+        <el-form-item label="提示词" prop="prompt">
           <div class="prompt-container" @click.stop>
             <el-input
               v-model="imageForm.prompt"
@@ -237,9 +237,19 @@ const taskList = ref([])
 
 // 图片任务相关
 const imageDialogVisible = ref(false)
+const imageFormRef = ref(null)
 const uploadUrl = 'http://localhost:8000/api/materials/upload'
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
+}
+
+// 表单验证规则
+const imageRules = {
+  name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+  model: [{ required: true, message: '请选择模型', trigger: 'change' }],
+  ratio: [{ required: true, message: '请选择图片比例', trigger: 'change' }],
+  resolution: [{ required: true, message: '请选择分辨率', trigger: 'change' }],
+  prompt: [{ required: true, message: '请输入提示词', trigger: 'blur' }]
 }
 
 const imageForm = ref({
@@ -436,11 +446,15 @@ const closeImagePicker = () => {
 }
 
 const handleCreateImageTask = async () => {
-  if (!imageForm.value.name || !imageForm.value.model || !imageForm.value.prompt) {
-    ElMessage.warning('请填写完整信息')
+  // 表单验证
+  if (!imageFormRef.value) return
+  
+  try {
+    await imageFormRef.value.validate()
+  } catch (error) {
     return
   }
-
+  
   creating.value = true
   try {
     // 提取提示词中@引用的图片URL
