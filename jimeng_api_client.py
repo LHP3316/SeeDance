@@ -1113,6 +1113,15 @@ class JimengAPIClient:
                     "text": pure_prompt
                 })
             
+            # 调试：打印提取的描述
+            print(f"\n[DEBUG] 提取的图片描述:")
+            for filename, desc in image_descriptions_map.items():
+                print(f"  - {filename}: {desc}")
+            print(f"[DEBUG] 纯文本提示词: {pure_prompt}")
+            print(f"[DEBUG] meta_list 数量: {len(meta_list)}")
+            for i, meta in enumerate(meta_list):
+                print(f"  [{i}] meta_type={meta.get('meta_type')}, text={meta.get('text', '')[:50]}")
+            
             unified_edit_input = {
                 "type": "",
                 "id": str(uuid.uuid4()),
@@ -1225,16 +1234,26 @@ class JimengAPIClient:
                 },
                 "submit_id": submit_id,
                 "metrics_extra": json.dumps({
-                    "promptSource": "custom",
-                    "originSubmitId": submit_id,
                     "isDefaultSeed": 1,
-                    "originTemplateId": "",
-                    "imageNameMapping": {},
-                    "isUseAiGenPrompt": False,
-                    "batchNumber": 1,
+                    "originSubmitId": submit_id,
+                    "isRegenerate": False,
                     "enterFrom": "click",
                     "position": "page_bottom_box",
-                    "functionMode": "omni_reference"
+                    "functionMode": "omni_reference",
+                    "sceneOptions": json.dumps([{
+                        "type": "video",
+                        "scene": "BasicVideoGenerateButton",
+                        "resolution": "720p",
+                        "modelReqKey": model_req_key,
+                        "videoDuration": duration,
+                        "reportParams": {
+                            "enterSource": "generate",
+                            "vipSource": "generate",
+                            "extraVipFunctionKey": f"{model_req_key}-720p",
+                            "useVipFunctionDetailsReporterHoc": True
+                        },
+                        "materialTypes": [1]
+                    }])
                 }),
                 "draft_content": json.dumps(draft_content),
                 "http_common_info": {"aid": self.aid}
@@ -1242,7 +1261,6 @@ class JimengAPIClient:
             
             token_info = self.token_manager.get_token('/mweb/v1/aigc_draft/generate')
             params = {
-                "babi_param": json.dumps(babi_param),
                 "aid": self.aid,
                 "device_platform": "web",
                 "region": "cn",

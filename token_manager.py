@@ -71,9 +71,11 @@ class TokenManager:
         Returns:
             Cookie字符串
         """
-        timestamp = int(time.time())
-        expire_time = timestamp + 60 * 24 * 60 * 60  # 60天后
-        expire_date = time.strftime("%a, %d-%b-%Y %H:%M:%S GMT", time.gmtime(expire_time))
+        # 使用网页版Cookie中的原始时间戳，避免触发风控
+        # sid_guard=eccb32e0b3ccbd3464dc0cc90dbcdca4%7C1776394469%7C31536000%7CSat%2C+17-Apr-2027+02%3A54%3A29+GMT
+        timestamp = 1776394469  # 网页版的原始时间戳
+        expire_time = timestamp + 31536000  # 1年
+        expire_date = "Sat, 17-Apr-2027 02:54:29 GMT"  # 网页版的过期时间
         
         cookie_parts = [
             f"sessionid={self.sessionid}",
@@ -84,12 +86,15 @@ class TokenManager:
             f"uid_tt={self.user_id}",
             f"uid_tt_ss={self.user_id}",
             f"sid_tt={self.sessionid}",
-            f"sid_guard={self.sessionid}%7C{timestamp}%7C5184000%7C{expire_date}",
+            f"sid_guard={self.sessionid}%7C{timestamp}%7C31536000%7C{expire_date.replace(' ', '+')}",
             f"ssid_ucp_v1=1.0.0-{hashlib.md5((self.sessionid + str(timestamp)).encode()).hexdigest()}",
             f"sid_ucp_v1=1.0.0-{hashlib.md5((self.sessionid + str(timestamp)).encode()).hexdigest()}",
             "store-region=cn-gd",
             "store-region-src=uid",
-            "is_staff_user=false"
+            "is_staff_user=false",
+            "ttwid=1|LlHqsZ2vBHo1qc2ym36T62tRmZ6EgOVqMS-DeTVBE5g|1776667543|dffd461eed29cde363f8545cdc1c53d69babf027ef04facdffeec136b09c329f",  # 添加 ttwid
+            "odin_tt=304cd0c3f05aeeab872dc95c8a06892da4c736dd67bfc6adb34994b1f0fb5de540f98077a641aa37d0537d3565f9caf0f38ed5c15e8078d962260e049f77451e",  # 添加 odin_tt
+            "s_v_web_id=verify_mo1bb0pe_c9oFbrqI_C3K6_4Fa3_9ROP_uesVHlSzvgqW"  # 添加 s_v_web_id
         ]
         
         return "; ".join(cookie_parts)
@@ -154,12 +159,12 @@ class TokenManager:
             'sec-fetch-site': 'same-origin',
             'sign': token_info["sign"],
             'sign-ver': '1',
+            'tdid': '',  # 设备ID，留空即可
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
         }
         
-        # 非生成接口保留 msToken 和 a-bogus
-        if api_path != '/mweb/v1/aigc_draft/generate':
-            headers['msToken'] = token_info["msToken"]
-            headers['a-bogus'] = token_info["a_bogus"]
+        # msToken 和 a_bogus 放在 URL 参数中，不再放在 headers 中
+        # 这样所有接口都可以使用
+        # 不需要特殊处理
         
         return headers, token_info
