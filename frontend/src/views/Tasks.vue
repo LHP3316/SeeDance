@@ -95,13 +95,42 @@
         </el-form-item>
 
         <el-form-item label="提示词">
-          <el-input
-            v-model="imageForm.prompt"
-            type="textarea"
-            :rows="5"
-            placeholder="请输入图片描述，输入 @ 可引用已上传的图片"
-            @input="handlePromptInput"
-          />
+          <div class="prompt-container">
+            <el-input
+              v-model="imageForm.prompt"
+              type="textarea"
+              :rows="5"
+              placeholder="请输入图片描述，输入 @ 可引用已上传的图片"
+              @input="handlePromptInput"
+              ref="promptInputRef"
+            />
+            
+            <!-- @图片选择下拉框 -->
+            <div 
+              v-if="showImagePicker" 
+              class="image-picker-dropdown"
+              :style="pickerStyle"
+            >
+              <div class="picker-header">选择图片</div>
+              <div class="picker-list">
+                <div 
+                  v-for="(file, index) in imageForm.uploadedFiles" 
+                  :key="file.uid"
+                  class="picker-item"
+                  @click="insertImageTag(index)"
+                >
+                  <el-image
+                    :src="file.url"
+                    class="picker-image"
+                    fit="cover"
+                  />
+                  <span class="picker-name">{{ file.name }}</span>
+                </div>
+                <el-empty v-if="imageForm.uploadedFiles.length === 0" description="暂无图片" :image-size="60" />
+              </div>
+            </div>
+          </div>
+          
           <div v-if="imageForm.uploadedFiles.length > 0" class="image-tags">
             <span class="tag-label">已上传图片：</span>
             <el-tag
@@ -219,6 +248,12 @@ const imageForm = ref({
   scheduledTime: ''
 })
 
+// @图片选择器相关
+const showImagePicker = ref(false)
+const pickerStyle = ref({})
+const promptInputRef = ref(null)
+const lastAtPosition = ref(null)
+
 // 视频任务相关
 const videoDialogVisible = ref(false)
 const videoForm = ref({
@@ -326,7 +361,61 @@ const handleRemoveTag = (index) => {
 }
 
 const handlePromptInput = (value) => {
-  // 可以在这里实现@自动补全逻辑
+  // 检测最后输入的字符是否是@
+  if (value && value.endsWith('@')) {
+    // 显示图片选择器
+    showImagePicker.value = true
+    lastAtPosition.value = value.length - 1
+    
+    // 计算下拉框位置
+    setTimeout(() => {
+      calculatePickerPosition()
+    }, 0)
+  } else if (showImagePicker.value) {
+    // 如果输入了其他字符，隐藏选择器
+    // 但如果是在@后输入空格，也隐藏
+    const lastChar = value ? value[value.length - 1] : ''
+    if (lastChar === ' ' || !value.endsWith('@')) {
+      showImagePicker.value = false
+    }
+  }
+}
+
+const calculatePickerPosition = () => {
+  // 简单定位，显示在输入框下方
+  pickerStyle.value = {
+    position: 'absolute',
+    top: '100%',
+    left: '0',
+    marginTop: '4px',
+    zIndex: 2000
+  }
+}
+
+const insertImageTag = (index) => {
+  const file = imageForm.value.uploadedFiles[index]
+  if (!file) return
+  
+  // 在@位置插入图片标签
+  const prompt = imageForm.value.prompt
+  const atPos = prompt.lastIndexOf('@')
+  
+  if (atPos !== -1) {
+    // 替换@为图片标签
+    const before = prompt.substring(0, atPos)
+    const after = prompt.substring(atPos + 1)
+    imageForm.value.prompt = `${before}[@${file.name}]${after}`
+  }
+  
+  // 隐藏选择器
+  showImagePicker.value = false
+  
+  // 聚焦回输入框
+  setTimeout(() => {
+    if (promptInputRef.value) {
+      promptInputRef.value.focus()
+    }
+  }, 100)
 }
 
 const handleCreateImageTask = async () => {
@@ -433,5 +522,88 @@ onMounted(fetchTasks)
   font-size: 12px;
   color: #606266;
   margin-right: 4px;
+}
+
+/* 提示词容器 */
+.prompt-container {
+  position: relative;
+}
+
+/* 图片选择下拉框 */
+.image-picker-dropdown {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  min-width: 300px;
+  max-width: 500px;
+  max-height: 300px;
+  overflow: hidden;
+  z-index: 2000;
+}
+
+.picker-header {
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e4e7ed;
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.picker-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  margin-bottom: 4px;
+}
+
+.picker-item:hover {
+  background: #f5f7fa;
+}
+
+.picker-item:last-child {
+  margin-bottom: 0;
+}
+
+.picker-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.picker-name {
+  flex: 1;
+  font-size: 13px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 滚动条样式 */
+.picker-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.picker-list::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+
+.picker-list::-webkit-scrollbar-thumb:hover {
+  background: #909399;
 }
 </style>
