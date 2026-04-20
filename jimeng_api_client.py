@@ -989,6 +989,13 @@ class JimengAPIClient:
             }
             model_req_key = model_map.get(model, "dreamina_seedance_40_vision")
             
+            # 根据模型选择benefit_type（s2.0用普通版，s2.0p用Fast VIP版）
+            benefit_type_map = {
+                "s2.0": "seedance_20_720p_output",        # 普通版
+                "s2.0p": "seedance_20_fast_720p_output"   # Fast VIP版
+            }
+            benefit_type = benefit_type_map.get(model, "seedance_20_720p_output")
+            
             duration_ms = duration * 1000
             if duration_ms not in [4000, 5000]:
                 duration_ms = 4000
@@ -1171,13 +1178,13 @@ class JimengAPIClient:
                     "root_model": model_req_key,
                     "workspace_id": 0,
                     "m_video_commerce_info": {
-                        "benefit_type": "seedance_20_fast_720p_output",
+                        "benefit_type": benefit_type,
                         "resource_id": "generate_video",
                         "resource_id_type": "str",
                         "resource_sub_type": "aigc"
                     },
                     "m_video_commerce_info_list": [{
-                        "benefit_type": "seedance_20_fast_720p_output",
+                        "benefit_type": benefit_type,
                         "resource_id": "generate_video",
                         "resource_id_type": "str",
                         "resource_sub_type": "aigc"
@@ -1292,6 +1299,14 @@ class JimengAPIClient:
             }
             model_req_key = model_map.get(model, "dreamina_seedance_40_vision")
             
+            # 根据模型选择benefit_type（s2.0用普通版，s2.0p用Fast VIP版）
+            benefit_type_map = {
+                "s2.0": "seedance_20_720p_output",        # 普通版
+                "s2.0p": "seedance_20_fast_720p_output",  # Fast VIP版
+                "p2.0p": "basic_video_operation_vgfm"     # p2.0p专用
+            }
+            benefit_type = benefit_type_map.get(model, "seedance_20_720p_output")
+            
             duration_ms = duration * 1000
             if duration_ms not in [4000, 5000]:
                 duration_ms = 4000
@@ -1389,13 +1404,13 @@ class JimengAPIClient:
                     "root_model": model_req_key,
                     "workspace_id": 0,  # 0表示默认工作空间
                     "m_video_commerce_info": {
-                        "benefit_type": "seedance_20_fast_720p_output",
+                        "benefit_type": benefit_type,
                         "resource_id": "generate_video",
                         "resource_id_type": "str",
                         "resource_sub_type": "aigc"
                     },
                     "m_video_commerce_info_list": [{
-                        "benefit_type": "seedance_20_fast_720p_output",
+                        "benefit_type": benefit_type,
                         "resource_id": "generate_video",
                         "resource_id_type": "str",
                         "resource_sub_type": "aigc"
@@ -1722,7 +1737,7 @@ class JimengAPIClient:
                     # 尝试获取视频URL
                     video_url = None
                     
-                    # 从resources提取
+                    # 方式1：从resources提取
                     resources = history_data.get("resources", [])
                     for resource in resources:
                         if resource.get("type") == "video":
@@ -1730,13 +1745,21 @@ class JimengAPIClient:
                             if video_url:
                                 break
                     
-                    # 从item_list提取（备用）
+                    # 方式2：从item_list提取
                     if not video_url:
                         item_list = history_data.get("item_list", [])
                         for item in item_list:
+                            # 尝试 video 字段
                             video = item.get("video", {})
                             if video and video.get("video_url"):
                                 video_url = video["video_url"]
+                                break
+                            
+                            # 尝试 common_attr.item_urls（实际返回的数据结构）
+                            common_attr = item.get("common_attr", {})
+                            item_urls = common_attr.get("item_urls", [])
+                            if item_urls and item_urls[0]:
+                                video_url = item_urls[0]
                                 break
                     
                     if video_url:
@@ -1750,7 +1773,13 @@ class JimengAPIClient:
                             "url": video_url
                         }
                     else:
-                        print(f"\n[WARNING] 状态30但未找到视频URL")
+                        print(f"\n[WARNING] 状态{status}但未找到视频URL")
+                        print(f"  - item_list数量: {len(history_data.get('item_list', []))}")
+                        if history_data.get("item_list"):
+                            first_item = history_data["item_list"][0]
+                            print(f"  - 第一个item的keys: {list(first_item.keys())}")
+                            if "common_attr" in first_item:
+                                print(f"  - common_attr.item_urls: {first_item['common_attr'].get('item_urls', [])}")
                         print(f"  - 完整数据: {json.dumps(history_data, ensure_ascii=False, indent=2)[:1000]}...")
                         # 继续等待，可能还在处理
                         continue
