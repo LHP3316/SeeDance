@@ -186,34 +186,137 @@
       title="新建视频任务"
       width="600px"
     >
-      <el-form :model="videoForm" label-width="100px">
-        <el-form-item label="任务名称">
+      <el-form :model="videoForm" :rules="videoRules" ref="videoFormRef" label-width="100px">
+        <el-form-item label="任务名称" prop="name">
           <el-input v-model="videoForm.name" placeholder="请输入任务名称" />
         </el-form-item>
         
-        <el-form-item label="提示词">
-          <el-input
-            v-model="videoForm.prompt"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入视频描述"
-          />
-        </el-form-item>
-
-        <el-form-item label="选择模型">
+        <el-form-item label="选择模型" prop="model">
           <el-select v-model="videoForm.model" placeholder="请选择模型" style="width: 100%">
-            <el-option label="即梦视频2.0" value="jimeng_video_v2" />
-            <el-option label="即梦视频1.5" value="jimeng_video_v1_5" />
-            <el-option label="高清视频生成" value="hd_video_gen" />
+            <el-option-group label="Seedance 2.0系列">
+              <el-option label="Seedance 2.0 Fast VIP - 极速推理，会员专属通道" value="s2.0" />
+              <el-option label="Seedance 2.0 VIP - 全模态能力，会员专属通道" value="s2.0p" />
+              <el-option label="Seedance 2.0 Fast - 高性价比" value="s2.0_fast" />
+              <el-option label="Seedance 2.0 - 全能王者" value="s2.0_standard" />
+            </el-option-group>
           </el-select>
         </el-form-item>
 
-        <el-form-item label="视频比例">
-          <el-select v-model="videoForm.ratio" placeholder="请选择比例" style="width: 100%">
-            <el-option label="16:9" value="16:9" />
-            <el-option label="9:16" value="9:16" />
-            <el-option label="1:1" value="1:1" />
+        <el-form-item label="视频比例" prop="ratio">
+          <el-radio-group v-model="videoForm.ratio" class="ratio-group">
+            <el-radio-button label="16:9">16:9</el-radio-button>
+            <el-radio-button label="9:16">9:16</el-radio-button>
+            <el-radio-button label="1:1">1:1</el-radio-button>
+            <el-radio-button label="4:3">4:3</el-radio-button>
+            <el-radio-button label="3:4">3:4</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="视频时长" prop="duration">
+          <el-select v-model="videoForm.duration" placeholder="请选择时长" style="width: 100%">
+            <el-option label="4秒" :value="4" />
+            <el-option label="5秒" :value="5" />
+            <el-option label="6秒" :value="6" />
+            <el-option label="7秒" :value="7" />
+            <el-option label="8秒" :value="8" />
+            <el-option label="9秒" :value="9" />
+            <el-option label="10秒" :value="10" />
           </el-select>
+        </el-form-item>
+
+        <el-form-item label="提示词" prop="prompt">
+          <div class="prompt-container" @click.stop>
+            <el-input
+              v-model="videoForm.prompt"
+              type="textarea"
+              :rows="5"
+              placeholder="请输入视频描述，输入 @ 可引用已上传的图片"
+              @input="handleVideoPromptInput"
+              ref="videoPromptInputRef"
+              style="width: 100%"
+            />
+            
+            <!-- @图片选择下拉框 -->
+            <div 
+              v-if="showVideoImagePicker" 
+              class="image-picker-dropdown"
+              :style="videoPickerStyle"
+              @click.stop
+            >
+              <div class="picker-header">
+                <span>选择图片</span>
+                <el-icon class="close-btn" @click="closeVideoImagePicker"><Close /></el-icon>
+              </div>
+              <div class="picker-list">
+                <div 
+                  v-for="(file, index) in videoForm.uploadedFiles" 
+                  :key="file.uid"
+                  class="picker-item"
+                  @click="insertVideoImageTag(index)"
+                >
+                  <el-image
+                    :src="file.url"
+                    class="picker-image"
+                    fit="cover"
+                  />
+                  <span class="picker-name">{{ file.name }}</span>
+                </div>
+                <div v-if="videoForm.uploadedFiles.length === 0" class="empty-tip">
+                  <el-icon :size="40"><Picture /></el-icon>
+                  <p>暂无图片，请先上传</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="videoForm.uploadedFiles.length > 0" class="image-tags">
+            <span class="tag-label">已上传图片：</span>
+            <span
+              v-for="(file, index) in videoForm.uploadedFiles"
+              :key="file.uid"
+              class="image-tag-text"
+            >
+              @{{ file.name }}
+              <el-icon class="remove-icon" @click="handleRemoveVideoTag(index)">
+                <Close />
+              </el-icon>
+            </span>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="上传图片">
+          <el-upload
+            ref="videoUploadRef"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :on-success="handleVideoUploadSuccess"
+            :on-remove="handleVideoRemoveFile"
+            :on-exceed="handleVideoExceed"
+            :file-list="videoForm.uploadedFiles"
+            multiple
+            :limit="12"
+            list-type="picture-card"
+            accept="image/*"
+            :class="{ 'hide-upload': videoForm.uploadedFiles.length >= 12 }"
+          >
+            <el-icon><Plus /></el-icon>
+          </el-upload>
+          <div class="upload-tip">支持jpg/png格式，最多12张</div>
+        </el-form-item>
+
+        <el-form-item label="执行时间" prop="scheduledTime">
+          <el-date-picker
+            v-model="videoForm.scheduledTime"
+            type="datetime"
+            placeholder="选择日期时间"
+            :disabled-date="disabledVideoDate"
+            :disabled-hours="disabledVideoHours"
+            :disabled-minutes="disabledVideoMinutes"
+            :disabled-seconds="disabledVideoSeconds"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+          />
         </el-form-item>
       </el-form>
 
@@ -277,8 +380,71 @@ const videoForm = ref({
   name: '',
   prompt: '',
   model: '',
-  ratio: '16:9'
+  ratio: '16:9',
+  duration: 4,
+  scheduledTime: '',
+  uploadedFiles: []
 })
+
+// 视频表单验证规则
+const videoRules = {
+  name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
+  model: [{ required: true, message: '请选择模型', trigger: 'change' }],
+  ratio: [{ required: true, message: '请选择视频比例', trigger: 'change' }],
+  duration: [{ required: true, message: '请选择视频时长', trigger: 'change' }],
+  prompt: [{ required: true, message: '请输入提示词', trigger: 'blur' }],
+  scheduledTime: [{ required: true, message: '请选择执行时间', trigger: 'change' }]
+}
+
+// 视频表单ref
+const videoFormRef = ref(null)
+
+// 视频@图片选择器相关
+const showVideoImagePicker = ref(false)
+const videoPickerStyle = ref({})
+const videoPromptInputRef = ref(null)
+const lastVideoAtPosition = ref(0)
+
+// 视频时间限制函数
+const disabledVideoDate = (time) => {
+  return time.getTime() < Date.now() - 8.64e7
+}
+
+const disabledVideoHours = () => {
+  const selectedDate = videoForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  
+  if (selectedDate === today) {
+    const currentHour = new Date().getHours()
+    return Array.from({ length: 24 }, (_, i) => i).filter(h => h < currentHour)
+  }
+  return []
+}
+
+const disabledVideoMinutes = (selectedHour) => {
+  const selectedDate = videoForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  const currentHour = new Date().getHours()
+  
+  if (selectedDate === today && selectedHour === currentHour) {
+    const currentMinute = new Date().getMinutes()
+    return Array.from({ length: 60 }, (_, i) => i).filter(m => m < currentMinute)
+  }
+  return []
+}
+
+const disabledVideoSeconds = (selectedHour, selectedMinute) => {
+  const selectedDate = videoForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  const currentHour = new Date().getHours()
+  const currentMinute = new Date().getMinutes()
+  
+  if (selectedDate === today && selectedHour === currentHour && selectedMinute === currentMinute) {
+    const currentSecond = new Date().getSeconds()
+    return Array.from({ length: 60 }, (_, i) => i).filter(s => s < currentSecond)
+  }
+  return []
+}
 
 // 时间限制函数
 const now = new Date()
@@ -345,12 +511,19 @@ const showCreateDialog = (type) => {
     }
     imageDialogVisible.value = true
   } else {
+    if (videoFormRef.value) {
+      videoFormRef.value.resetFields()
+    }
     videoForm.value = {
       name: '',
       prompt: '',
       model: '',
-      ratio: '16:9'
+      ratio: '16:9',
+      duration: 4,
+      scheduledTime: '',
+      uploadedFiles: []
     }
+    showVideoImagePicker.value = false
     videoDialogVisible.value = true
   }
 }
@@ -489,8 +662,11 @@ const handleCreateImageTask = async () => {
 }
 
 const handleCreateVideoTask = async () => {
-  if (!videoForm.value.name || !videoForm.value.prompt || !videoForm.value.model) {
-    ElMessage.warning('请填写完整信息')
+  if (!videoFormRef.value) return
+  
+  try {
+    await videoFormRef.value.validate()
+  } catch (error) {
     return
   }
 
@@ -498,7 +674,8 @@ const handleCreateVideoTask = async () => {
   try {
     await createTask({
       ...videoForm.value,
-      type: 'video'
+      type: 'video',
+      image_urls: videoForm.value.uploadedFiles.map(f => f.url)
     })
     ElMessage.success('任务创建成功')
     videoDialogVisible.value = false
@@ -508,6 +685,111 @@ const handleCreateVideoTask = async () => {
   } finally {
     creating.value = false
   }
+}
+
+// 视频上传相关函数
+const handleVideoUploadSuccess = (response, file) => {
+  ElMessage.success('上传成功')
+  videoForm.value.uploadedFiles.push({
+    uid: file.uid,
+    name: response.name,
+    url: response.file_url
+  })
+}
+
+const handleVideoExceed = (files) => {
+  ElMessage.warning(`最多只能上传12张图片，已选择${files.length}张`)
+}
+
+const handleVideoRemoveFile = (file) => {
+  const index = videoForm.value.uploadedFiles.findIndex(f => f.uid === file.uid)
+  if (index > -1) {
+    videoForm.value.uploadedFiles.splice(index, 1)
+  }
+}
+
+const handleRemoveVideoTag = (index) => {
+  videoForm.value.uploadedFiles.splice(index, 1)
+}
+
+// 视频@图片选择器函数
+const handleVideoPromptInput = (value) => {
+  if (value && value.endsWith('@')) {
+    showVideoImagePicker.value = true
+    lastVideoAtPosition.value = value.length - 1
+    setTimeout(() => {
+      calculateVideoPickerPosition()
+    }, 0)
+  } else if (showVideoImagePicker.value) {
+    const lastChar = value ? value[value.length - 1] : ''
+    if (lastChar === ' ' || !value.endsWith('@')) {
+      showVideoImagePicker.value = false
+    }
+  }
+}
+
+const calculateVideoPickerPosition = () => {
+  if (!videoPromptInputRef.value) return
+  
+  const textarea = videoPromptInputRef.value.$el.querySelector('textarea')
+  if (!textarea) return
+  
+  const cursorPosition = lastVideoAtPosition.value
+  const textBeforeCursor = videoForm.value.prompt.substring(0, cursorPosition)
+  
+  const tempDiv = document.createElement('div')
+  tempDiv.style.cssText = `
+    position: absolute;
+    visibility: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font: ${window.getComputedStyle(textarea).font};
+    width: ${textarea.offsetWidth}px;
+    padding: ${window.getComputedStyle(textarea).padding};
+  `
+  tempDiv.textContent = textBeforeCursor
+  document.body.appendChild(tempDiv)
+  
+  const lines = tempDiv.innerHTML.split('\n')
+  const currentLineIndex = lines.length - 1
+  const lineHeight = parseInt(window.getComputedStyle(textarea).lineHeight)
+  const paddingTop = parseInt(window.getComputedStyle(textarea).paddingTop)
+  
+  const topOffset = textarea.offsetTop + paddingTop + (currentLineIndex * lineHeight) + lineHeight
+  const leftOffset = textarea.offsetLeft + (textarea.scrollWidth / 2) - 150
+  
+  document.body.removeChild(tempDiv)
+  
+  videoPickerStyle.value = {
+    position: 'absolute',
+    top: `${topOffset}px`,
+    left: `${Math.max(0, leftOffset)}px`,
+    zIndex: 2000,
+    width: '300px',
+    maxHeight: '200px',
+    overflowY: 'auto'
+  }
+}
+
+const closeVideoImagePicker = () => {
+  showVideoImagePicker.value = false
+  if (videoForm.value.prompt && videoForm.value.prompt.endsWith('@')) {
+    videoForm.value.prompt = videoForm.value.prompt.slice(0, -1)
+  }
+}
+
+const insertVideoImageTag = (index) => {
+  const file = videoForm.value.uploadedFiles[index]
+  const prompt = videoForm.value.prompt
+  const atPos = prompt.lastIndexOf('@')
+  
+  if (atPos !== -1) {
+    const before = prompt.substring(0, atPos)
+    const after = prompt.substring(atPos + 1)
+    videoForm.value.prompt = `${before}@${file.name}${after}`
+  }
+  
+  showVideoImagePicker.value = false
 }
 
 const handleRun = async (id) => {
