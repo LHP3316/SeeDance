@@ -1,8 +1,10 @@
-from pydantic_settings import BaseSettings
 from typing import Optional
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    DATABASE_URL: Optional[str] = None
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
     DB_USER: str = "seedance"
@@ -15,7 +17,9 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 52428800
     
     @property
-    def DATABASE_URL(self) -> str:
+    def resolved_database_url(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
         return f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}?charset=utf8mb4"
     
     class Config:
