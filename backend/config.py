@@ -20,5 +20,6 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "allow"  # 允许额外的字段
 
 settings = Settings()

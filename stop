@@ -12,6 +12,62 @@ is_running() {
   kill -0 "$pid" >/dev/null 2>&1
 }
 
+port_pids() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u
+    return 0
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | awk -v p=":${port}" '
+      $4 ~ p"$" {
+        if (match($0, /pid=[0-9]+/)) {
+          print substr($0, RSTART + 4, RLENGTH - 4)
+        }
+      }
+    ' | sort -u
+    return 0
+  fi
+
+  return 1
+}
+
+kill_pids() {
+  local pids="$1"
+  if [[ -z "${pids// }" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    kill "$pid" >/dev/null 2>&1 || true
+  done <<<"$pids"
+
+  sleep 1
+
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    if is_running "$pid"; then
+      kill -9 "$pid" >/dev/null 2>&1 || true
+    fi
+  done <<<"$pids"
+}
+
+stop_by_port() {
+  local name="$1"
+  local port="$2"
+
+  local pids
+  pids="$(port_pids "$port" || true)"
+  if [[ -z "${pids// }" ]]; then
+    return 0
+  fi
+
+  echo "found unmanaged $name process on port $port, stopping..."
+  kill_pids "$pids"
+}
+
 stop_one() {
   local name="$1"
   local pid_file="$2"
@@ -57,4 +113,6 @@ stop_one() {
 echo "==== SeeDance stop ===="
 stop_one "frontend" "$FRONTEND_PID_FILE"
 stop_one "backend" "$BACKEND_PID_FILE"
+stop_by_port "frontend" 5173
+stop_by_port "backend" 8000
 echo "all stop commands executed."

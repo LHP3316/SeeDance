@@ -1,116 +1,90 @@
-﻿from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-
-from core.deps import require_admin, require_super_admin
+from typing import Optional
 from database import get_db
-from models.log import SystemLog
 from models.system_config import SystemConfig
 from models.user import User
-from schemas.log import SystemLogList
-from schemas.user import UserCreate, UserList, UserResponse, UserUpdate
+from models.log import SystemLog
+from schemas.user import UserCreate, UserResponse
+from schemas.log import LogResponse
+from core.security import get_password_hash
+from core.deps import get_current_user, require_admin
 
-router = APIRouter(prefix="/system", tags=["System"])
-
-
-@router.get("/stats")
-async def get_system_stats(db: Session = Depends(get_db)):
-    from models.material import Material
-    from models.task import Task
-
-    total_tasks = db.query(Task).filter(Task.is_deleted == False).count()
-    pending_tasks = db.query(Task).filter(Task.status == "pending").count()
-    running_tasks = db.query(Task).filter(Task.status == "running").count()
-    completed_tasks = db.query(Task).filter(Task.status == "completed").count()
-    failed_tasks = db.query(Task).filter(Task.status == "failed").count()
-
-    total_images = db.query(Material).filter(Material.type == "image").count()
-    total_videos = db.query(Material).filter(Material.type == "video").count()
-
-    return {
-        "total_tasks": total_tasks,
-        "pending_tasks": pending_tasks,
-        "running_tasks": running_tasks,
-        "completed_tasks": completed_tasks,
-        "failed_tasks": failed_tasks,
-        "total_images": total_images,
-        "total_videos": total_videos,
-    }
+router = APIRouter(prefix="/system", tags=["系统管理"])
 
 
-@router.get("/users", response_model=UserList)
-async def get_users(
+@router.get("/session")
+async def get_session_id(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取SessionID配置"""
+    config = db.query(SystemConfig).filter(SystemConfig.key == "jimeng_session_id").first()
+    return {"sessionid": config.value if config else ""}
+
+
+@router.put("/session")
+async def update_session_id(
+    sessionid: dict,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """更新SessionID配置"""
+    config = db.query(SystemConfig).filter(SystemConfig.key == "jimeng_session_id").first()
+    
+    if config:
+        config.value = sessionid.get("sessionid", "")
+    else:
+        config = SystemConfig(
+            key="jimeng_session_id",
+            value=sessionid.get("sessionid", ""),
+            description="即梦API SessionID"
+        )
+        db.add(config)
+    
+    db.commit()
+    return {"message": "更新成功"}
+
+
+@router.get("/users", response_model=dict)
+async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
-    query = db.query(User).filter(User.role != "super_admin")
+    """获取用户列表"""
+    query = db.query(User)
     total = query.count()
-    users = (
-        query.order_by(User.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return {"total": total, "page": page, "page_size": page_size, "items": users}
+    users = query.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": users
+    }
 
 
 @router.post("/users", response_model=UserResponse)
 async def create_user(
     user_data: UserCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
-    existing = db.query(User).filter(User.username == user_data.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    if user_data.role == "super_admin":
-        raise HTTPException(status_code=400, detail="Creating super admin is forbidden")
-
-    from core.security import get_password_hash
-
+    """创建用户"""
+    # 检查用户名是否已存在
+    existing_user = db.query(User).filter(User.username == user_data.username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    
     user = User(
         username=user_data.username,
         password_hash=get_password_hash(user_data.password),
-        role="admin",
-        is_active=True,
+        role=user_data.role
     )
+    
     db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-@router.put("/users/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: int,
-    user_data: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if user.role == "super_admin":
-        raise HTTPException(status_code=400, detail="Updating super admin is forbidden")
-
-    if user_data.password:
-        from core.security import get_password_hash
-
-        user.password_hash = get_password_hash(user_data.password)
-
-    if user_data.role:
-        if user_data.role == "super_admin":
-            raise HTTPException(status_code=400, detail="Promoting to super admin is forbidden")
-        user.role = user_data.role
-
-    if user_data.is_active is not None:
-        user.is_active = user_data.is_active
-
     db.commit()
     db.refresh(user)
     return user
@@ -119,92 +93,43 @@ async def update_user(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db)
 ):
+    """删除用户"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 不允许删除超级管理员
     if user.role == "super_admin":
-        raise HTTPException(status_code=400, detail="Deleting super admin is forbidden")
-
-    if user.id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
-
+        raise HTTPException(status_code=400, detail="不能删除超级管理员")
+    
     db.delete(user)
     db.commit()
-    return {"message": "User deleted"}
+    return {"message": "删除成功"}
 
 
-@router.get("/config/sessionid")
-async def get_sessionid(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
-):
-    config = db.query(SystemConfig).filter(SystemConfig.key == "jimeng_sessionid").first()
-    if not config:
-        return {"sessionid": "", "configured": False}
-    return {
-        "sessionid": config.value,
-        "configured": bool(config.value),
-        "updated_at": config.updated_at,
-    }
-
-
-@router.put("/config/sessionid")
-async def update_sessionid(
-    sessionid: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_super_admin),
-):
-    config = db.query(SystemConfig).filter(SystemConfig.key == "jimeng_sessionid").first()
-    if config:
-        config.value = sessionid
-        config.updated_by = current_user.id
-    else:
-        config = SystemConfig(
-            key="jimeng_sessionid",
-            value=sessionid,
-            description="jimeng sessionid",
-            updated_by=current_user.id,
-        )
-        db.add(config)
-
-    db.commit()
-
-    log = SystemLog(
-        level="info",
-        module="system",
-        message=f"{current_user.username} updated sessionid",
-        user_id=current_user.id,
-    )
-    db.add(log)
-    db.commit()
-
-    return {"message": "sessionid updated"}
-
-
-@router.get("/logs", response_model=SystemLogList)
+@router.get("/logs", response_model=dict)
 async def get_system_logs(
-    level: Optional[str] = None,
-    module: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    level: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
+    """获取系统日志"""
     query = db.query(SystemLog)
+    
     if level:
         query = query.filter(SystemLog.level == level)
-    if module:
-        query = query.filter(SystemLog.module == module)
-
+    
     total = query.count()
-    logs = (
-        query.order_by(SystemLog.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    return {"total": total, "page": page, "page_size": page_size, "items": logs}
+    logs = query.order_by(SystemLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": logs
+    }

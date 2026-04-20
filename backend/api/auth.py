@@ -6,6 +6,7 @@ from models.user import User
 from schemas.user import UserLogin, Token, UserResponse
 from core.security import create_access_token, verify_password, get_password_hash
 from core.deps import get_current_user
+from datetime import datetime
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -42,3 +43,11 @@ async def login(
         "token_type": "bearer",
         "user": user
     }
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """获取当前用户信息"""
+    return current_user
