@@ -1,0 +1,23 @@
+#!/bin/bash
+# SeeDance 重启服务脚本
+
+# 获取脚本所在目录
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+echo "========================================="
+echo "  SeeDance 重启服务"
+echo "========================================="
+echo ""
+
+# 先停止
+echo "停止当前服务..."
+bash "${SCRIPT_DIR}/stop"
+
+# 等待一下
+echo "等待3秒..."
+sleep 3
+
+# 再启动
+echo ""
+bash "${SCRIPT_DIR}/start"

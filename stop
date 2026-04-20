@@ -1,0 +1,91 @@
+#!/bin/bash
+# SeeDance 停止服务脚本
+
+set -e
+
+# 获取脚本所在目录
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+echo "========================================="
+echo "  SeeDance 停止服务"
+echo "========================================="
+echo ""
+
+# 停止后端服务
+if [ -f "backend.pid" ]; then
+    PID=$(cat backend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        echo "停止后端服务 (PID: $PID)..."
+        kill $PID 2>/dev/null || true
+        sleep 2
+        
+        # 如果还在运行，强制杀死
+        if kill -0 $PID 2>/dev/null; then
+            echo "强制停止后端服务..."
+            kill -9 $PID 2>/dev/null || true
+            sleep 1
+        fi
+        echo "✓ 后端已停止"
+    else
+        echo "后端服务未运行 (PID文件存在但进程不存在)"
+    fi
+    rm -f backend.pid
+else
+    echo "后端服务未运行 (无PID文件)"
+fi
+
+# 停止前端服务
+if [ -f "frontend.pid" ]; then
+    PID=$(cat frontend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        echo "停止前端服务 (PID: $PID)..."
+        kill $PID 2>/dev/null || true
+        sleep 2
+        
+        # 如果还在运行，强制杀死
+        if kill -0 $PID 2>/dev/null; then
+            echo "强制停止前端服务..."
+            kill -9 $PID 2>/dev/null || true
+            sleep 1
+        fi
+        echo "✓ 前端已停止"
+    else
+        echo "前端服务未运行 (PID文件存在但进程不存在)"
+    fi
+    rm -f frontend.pid
+else
+    echo "前端服务未运行 (无PID文件)"
+fi
+
+# 清理可能残留的进程
+echo ""
+echo "清理残留进程..."
+# 杀死所有uvicorn进程（使用多种匹配模式）
+pkill -9 -f "uvicorn" 2>/dev/null || true
+pkill -9 -f "main:app" 2>/dev/null || true
+# 杀死所有vite进程
+pkill -9 -f "vite" 2>/dev/null || true
+pkill -9 -f "node.*vite" 2>/dev/null || true
+# 杀死所有esbuild进程
+pkill -9 -f "esbuild" 2>/dev/null || true
+sleep 2
+
+# 最后确保端口释放（等待3秒后再次检查）
+sleep 3
+PORT_8000=$(ss -tlnp 2>/dev/null | grep ':8000' | wc -l)
+PORT_5173=$(ss -tlnp 2>/dev/null | grep ':5173' | wc -l)
+if [ "$PORT_8000" -gt 0 ] || [ "$PORT_5173" -gt 0 ]; then
+    echo ""
+    echo "⚠️  检测到端口仍被占用，执行最终清理..."
+    pkill -9 -f "python3" 2>/dev/null || true
+    pkill -9 -f "node" 2>/dev/null || true
+    sleep 2
+    echo "✓ 最终清理完成"
+fi
+
+echo ""
+echo "========================================="
+echo "  所有服务已停止"
+echo "========================================="
+echo ""

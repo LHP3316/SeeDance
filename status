@@ -1,0 +1,106 @@
+#!/bin/bash
+# SeeDance 查看服务状态脚本
+
+# 获取脚本所在目录
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+echo "========================================="
+echo "  SeeDance 服务状态"
+echo "========================================="
+echo ""
+
+# 检查后端服务
+echo "后端服务:"
+if [ -f "backend.pid" ]; then
+    PID=$(cat backend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        echo "  状态: ✓ 运行中"
+        echo "  PID: $PID"
+        
+        # 检查端口
+        if ss -tlnp 2>/dev/null | grep -q ':8000'; then
+            echo "  端口: 8000 (正常)"
+        else
+            echo "  端口: 8000 (异常 - 进程存在但端口未监听)"
+        fi
+    else
+        echo "  状态: ✗ 已停止 (PID文件存在但进程不存在)"
+        echo "  建议: 执行 ./stop 清理PID文件"
+    fi
+else
+    echo "  状态: ✗ 未运行"
+fi
+
+echo ""
+
+# 检查前端服务
+echo "前端服务:"
+if [ -f "frontend.pid" ]; then
+    PID=$(cat frontend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        echo "  状态: ✓ 运行中"
+        echo "  PID: $PID"
+        
+        # 检查端口
+        if ss -tlnp 2>/dev/null | grep -q ':5173'; then
+            echo "  端口: 5173 (正常)"
+        else
+            echo "  端口: 5173 (异常 - 进程存在但端口未监听)"
+        fi
+    else
+        echo "  状态: ✗ 已停止 (PID文件存在但进程不存在)"
+        echo "  建议: 执行 ./stop 清理PID文件"
+    fi
+else
+    echo "  状态: ✗ 未运行"
+fi
+
+echo ""
+echo "========================================="
+echo "  访问地址"
+echo "========================================="
+echo ""
+
+# 检查端口占用
+PORT_8000=$(ss -tlnp 2>/dev/null | grep ':8000' | wc -l)
+PORT_5173=$(ss -tlnp 2>/dev/null | grep ':5173' | wc -l)
+
+if [ "$PORT_8000" -gt 0 ]; then
+    echo "后端服务: http://localhost:8000"
+    echo "API文档:  http://localhost:8000/docs"
+else
+    echo "后端服务: 未启动"
+fi
+
+echo ""
+
+if [ "$PORT_5173" -gt 0 ]; then
+    echo "前端服务: http://localhost:5173"
+else
+    echo "前端服务: 未启动"
+fi
+
+echo ""
+echo "========================================="
+
+# 显示内存使用情况
+echo ""
+echo "资源使用:"
+if [ -f "backend.pid" ]; then
+    PID=$(cat backend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        MEM=$(ps -p $PID -o rss= 2>/dev/null || echo "0")
+        echo "  后端内存: $((MEM / 1024)) MB"
+    fi
+fi
+
+if [ -f "frontend.pid" ]; then
+    PID=$(cat frontend.pid)
+    if kill -0 $PID 2>/dev/null; then
+        MEM=$(ps -p $PID -o rss= 2>/dev/null || echo "0")
+        echo "  前端内存: $((MEM / 1024)) MB"
+    fi
+fi
+
+echo ""
