@@ -53,11 +53,7 @@
             <div class="card-overlay">
               <el-button type="primary" size="small" @click.stop="previewMaterial(item)">
                 <el-icon><ZoomIn /></el-icon>
-                查看
-              </el-button>
-              <el-button type="danger" size="small" @click.stop="handleDelete(item.id)">
-                <el-icon><Delete /></el-icon>
-                删除
+                查看大图
               </el-button>
             </div>
           </div>
@@ -113,9 +109,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getMaterials, deleteMaterial } from '@/api/material'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Picture, VideoPlay, ZoomIn, Delete, Loading } from '@element-plus/icons-vue'
+import { getMaterials } from '@/api/material'
+import { ElMessage } from 'element-plus'
+import { Picture, VideoPlay, ZoomIn, Loading } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const materialList = ref([])
@@ -177,23 +173,6 @@ const previewMaterial = (material) => {
   currentMaterial.value = material
   previewUrl.value = material.file_url
   previewVisible.value = true
-}
-
-const handleDelete = async (id) => {
-  try {
-    await ElMessageBox.confirm('确定删除此素材？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    await deleteMaterial(id)
-    ElMessage.success('删除成功')
-    fetchMaterials()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除失败:', error)
-    }
-  }
 }
 
 onMounted(fetchMaterials)
