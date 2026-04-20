@@ -85,13 +85,13 @@
             :on-remove="handleRemoveFile"
             :file-list="imageForm.uploadedFiles"
             multiple
-            :limit="10"
+            :limit="5"
             list-type="picture-card"
             accept="image/*"
           >
             <el-icon><Plus /></el-icon>
           </el-upload>
-          <div class="upload-tip">支持jpg/png格式，最多10张</div>
+          <div class="upload-tip">支持jpg/png格式，最多5张</div>
         </el-form-item>
 
         <el-form-item label="提示词" prop="prompt">
