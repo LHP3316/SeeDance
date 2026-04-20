@@ -1,91 +1,60 @@
-#!/bin/bash
-# SeeDance 停止服务脚本
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
-
-# 获取脚本所在目录
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "========================================="
-echo "  SeeDance 停止服务"
-echo "========================================="
-echo ""
+BACKEND_PID_FILE="$SCRIPT_DIR/backend.pid"
+FRONTEND_PID_FILE="$SCRIPT_DIR/frontend.pid"
 
-# 停止后端服务
-if [ -f "backend.pid" ]; then
-    PID=$(cat backend.pid)
-    if kill -0 $PID 2>/dev/null; then
-        echo "停止后端服务 (PID: $PID)..."
-        kill $PID 2>/dev/null || true
-        sleep 2
-        
-        # 如果还在运行，强制杀死
-        if kill -0 $PID 2>/dev/null; then
-            echo "强制停止后端服务..."
-            kill -9 $PID 2>/dev/null || true
-            sleep 1
-        fi
-        echo "✓ 后端已停止"
-    else
-        echo "后端服务未运行 (PID文件存在但进程不存在)"
+is_running() {
+  local pid="$1"
+  kill -0 "$pid" >/dev/null 2>&1
+}
+
+stop_one() {
+  local name="$1"
+  local pid_file="$2"
+
+  if [[ ! -f "$pid_file" ]]; then
+    echo "$name is not running (no pid file)."
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  if [[ -z "$pid" ]]; then
+    rm -f "$pid_file"
+    echo "$name pid file is empty, cleaned."
+    return 0
+  fi
+
+  if ! is_running "$pid"; then
+    rm -f "$pid_file"
+    echo "$name process not found, stale pid cleaned ($pid)."
+    return 0
+  fi
+
+  echo "stopping $name (pid: $pid)..."
+  kill "$pid" >/dev/null 2>&1 || true
+
+  for _ in {1..10}; do
+    if ! is_running "$pid"; then
+      break
     fi
-    rm -f backend.pid
-else
-    echo "后端服务未运行 (无PID文件)"
-fi
+    sleep 1
+  done
 
-# 停止前端服务
-if [ -f "frontend.pid" ]; then
-    PID=$(cat frontend.pid)
-    if kill -0 $PID 2>/dev/null; then
-        echo "停止前端服务 (PID: $PID)..."
-        kill $PID 2>/dev/null || true
-        sleep 2
-        
-        # 如果还在运行，强制杀死
-        if kill -0 $PID 2>/dev/null; then
-            echo "强制停止前端服务..."
-            kill -9 $PID 2>/dev/null || true
-            sleep 1
-        fi
-        echo "✓ 前端已停止"
-    else
-        echo "前端服务未运行 (PID文件存在但进程不存在)"
-    fi
-    rm -f frontend.pid
-else
-    echo "前端服务未运行 (无PID文件)"
-fi
+  if is_running "$pid"; then
+    echo "$name did not exit in time, sending SIGKILL..."
+    kill -9 "$pid" >/dev/null 2>&1 || true
+  fi
 
-# 清理可能残留的进程
-echo ""
-echo "清理残留进程..."
-# 杀死所有uvicorn进程（使用多种匹配模式）
-pkill -9 -f "uvicorn" 2>/dev/null || true
-pkill -9 -f "main:app" 2>/dev/null || true
-# 杀死所有vite进程
-pkill -9 -f "vite" 2>/dev/null || true
-pkill -9 -f "node.*vite" 2>/dev/null || true
-# 杀死所有esbuild进程
-pkill -9 -f "esbuild" 2>/dev/null || true
-sleep 2
+  rm -f "$pid_file"
+  echo "$name stopped."
+}
 
-# 最后确保端口释放（等待3秒后再次检查）
-sleep 3
-PORT_8000=$(ss -tlnp 2>/dev/null | grep ':8000' | wc -l)
-PORT_5173=$(ss -tlnp 2>/dev/null | grep ':5173' | wc -l)
-if [ "$PORT_8000" -gt 0 ] || [ "$PORT_5173" -gt 0 ]; then
-    echo ""
-    echo "⚠️  检测到端口仍被占用，执行最终清理..."
-    pkill -9 -f "python3" 2>/dev/null || true
-    pkill -9 -f "node" 2>/dev/null || true
-    sleep 2
-    echo "✓ 最终清理完成"
-fi
-
-echo ""
-echo "========================================="
-echo "  所有服务已停止"
-echo "========================================="
-echo ""
+echo "==== SeeDance stop ===="
+stop_one "frontend" "$FRONTEND_PID_FILE"
+stop_one "backend" "$BACKEND_PID_FILE"
+echo "all stop commands executed."

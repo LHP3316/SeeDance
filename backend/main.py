@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib
+import logging
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("seedance-backend")
+
+app = FastAPI(
+    title="SeeDance Backend",
+    version="1.0.0",
+    description="Backend service for SeeDance",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"message": "SeeDance backend is running"}
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+def _try_include_router(module_name: str) -> None:
+    try:
+        module = importlib.import_module(module_name)
+        router = getattr(module, "router", None)
+        if router is not None:
+            app.include_router(router)
+            logger.info("Loaded router: %s", module_name)
+        else:
+            logger.warning("Router missing in module: %s", module_name)
+    except Exception as exc:
+        logger.warning("Skip router %s: %s", module_name, exc)
+
+
+for name in ("api.tasks", "api.materials", "api.system", "api.auth", "api.generation"):
+    _try_include_router(name)

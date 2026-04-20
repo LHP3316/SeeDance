@@ -1,0 +1,24 @@
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy.sql import func
+from database import Base
+import enum
+
+
+class ExecutionStatusEnum(str, enum.Enum):
+    running = "running"
+    success = "success"
+    failed = "failed"
+
+
+class TaskExecution(Base):
+    __tablename__ = "task_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
+    status = Column(Enum(ExecutionStatusEnum), default=ExecutionStatusEnum.running)
+    started_at = Column(DateTime, server_default=func.now())
+    finished_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    history_id = Column(String(100), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
