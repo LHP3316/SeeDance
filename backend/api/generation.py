@@ -4,7 +4,7 @@ from database import get_db
 from models.task import Task
 from services.jimeng_service import jimeng_service
 
-router = APIRouter(prefix="/api/generation", tags=["生成"])
+router = APIRouter(prefix="/generation", tags=["生成"])
 
 
 @router.post("/image")

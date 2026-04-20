@@ -10,7 +10,7 @@ from schemas.log import LogResponse
 from core.security import get_password_hash
 from core.deps import get_current_user, require_admin
 
-router = APIRouter(prefix="/api/system", tags=["系统管理"])
+router = APIRouter(prefix="/system", tags=["系统管理"])
 
 
 @router.get("/session")

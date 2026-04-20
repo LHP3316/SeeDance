@@ -46,7 +46,7 @@ async def health() -> dict[str, str]:
 def _try_include_router(module_name: str) -> None:
     try:
         module = importlib.import_module(module_name)
-        router = getattr(module, "router", None)
+        router = getattr(module, "router", None) or getattr(module, "api_router", None)
         if router is not None:
             app.include_router(router)
             logger.info("Loaded router: %s", module_name)
@@ -56,5 +56,5 @@ def _try_include_router(module_name: str) -> None:
         logger.warning("Skip router %s: %s", module_name, exc)
 
 
-for name in ("api.tasks", "api.materials", "api.system", "api.auth", "api.generation"):
-    _try_include_router(name)
+# 加载API路由（统一通过 api.__init__.py 入口）
+_try_include_router("api")
