@@ -564,6 +564,16 @@ onMounted(() => {
 /* 提示词容器 */
 .prompt-container {
   position: relative;
+  width: 100%;
+}
+
+.prompt-container :deep(.el-textarea) {
+  width: 100%;
+  min-width: 500px;
+}
+
+.prompt-container :deep(.el-textarea__inner) {
+  width: 100% !important;
 }
 
 /* 图片选择下拉框 */
