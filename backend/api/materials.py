@@ -9,11 +9,15 @@ from models.material import Material, MaterialTypeEnum, MaterialSourceEnum
 from schemas.material import MaterialResponse, MaterialListResponse
 from core.deps import get_current_user
 from config import settings
+import os
+from pathlib import Path
 
 router = APIRouter(prefix="/materials", tags=["素材管理"])
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# 使用项目根目录的uploads文件夹
+BASE_DIR = Path(__file__).parent.parent.parent
+UPLOAD_DIR = BASE_DIR / "uploads" / "materials"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.get("/", response_model=MaterialListResponse)
@@ -60,7 +64,7 @@ async def upload_material(
     # 生成唯一文件名
     ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4()}{ext}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    file_path = UPLOAD_DIR / unique_filename
     
     # 保存文件
     with open(file_path, "wb") as buffer:
@@ -71,8 +75,8 @@ async def upload_material(
     material = Material(
         name=file.filename,
         type=MaterialTypeEnum.image if type == "image" else MaterialTypeEnum.video,
-        file_url=f"/uploads/{unique_filename}",
-        file_path=file_path,
+        file_url=f"/uploads/materials/{unique_filename}",
+        file_path=str(file_path),
         source=MaterialSourceEnum.manual,
         task_id=task_id,
         created_by=current_user.id
