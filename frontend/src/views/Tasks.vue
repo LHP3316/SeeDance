@@ -222,6 +222,11 @@
             <el-option label="8秒" :value="8" />
             <el-option label="9秒" :value="9" />
             <el-option label="10秒" :value="10" />
+            <el-option label="11秒" :value="11" />
+            <el-option label="12秒" :value="12" />
+            <el-option label="13秒" :value="13" />
+            <el-option label="14秒" :value="14" />
+            <el-option label="15秒" :value="15" />
           </el-select>
         </el-form-item>
 
