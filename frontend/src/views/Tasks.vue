@@ -83,6 +83,7 @@
             :headers="uploadHeaders"
             :on-success="handleUploadSuccess"
             :on-remove="handleRemoveFile"
+            :on-exceed="handleExceed"
             :file-list="imageForm.uploadedFiles"
             multiple
             :limit="5"
@@ -361,6 +362,10 @@ const handleUploadSuccess = (response, file) => {
     name: response.name,  // 使用真实文件名（UUID格式）
     url: response.file_url
   })
+}
+
+const handleExceed = (files) => {
+  ElMessage.warning(`最多只能上传5张图片，已选择${files.length}张`)
 }
 
 const handleRemoveFile = (file) => {
