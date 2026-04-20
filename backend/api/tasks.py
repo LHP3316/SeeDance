@@ -8,7 +8,7 @@ from schemas.task import TaskCreate, TaskUpdate, TaskResponse, ExecutionResponse
 from core.deps import get_current_user, require_admin
 from models.user import User
 
-router = APIRouter(prefix="/tasks", tags=["任务管理"])
+router = APIRouter(prefix="/api/tasks", tags=["任务管理"])
 
 
 @router.get("/", response_model=dict)

@@ -8,9 +8,9 @@ from core.security import create_access_token, verify_password, get_password_has
 from core.deps import get_current_user
 from datetime import datetime
 
-router = APIRouter(prefix="/auth", tags=["认证"])
+router = APIRouter(prefix="/api/auth", tags=["认证"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 @router.post("/login", response_model=Token)

@@ -10,7 +10,7 @@ from schemas.material import MaterialCreate, MaterialResponse
 from core.deps import get_current_user
 from config import settings
 
-router = APIRouter(prefix="/materials", tags=["素材管理"])
+router = APIRouter(prefix="/api/materials", tags=["素材管理"])
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
