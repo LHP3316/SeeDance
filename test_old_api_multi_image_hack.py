@@ -1,6 +1,6 @@
 """
-测试即梦AI 旧接口图生视频（单图）
-使用 /mweb/v1/generate_video 接口，ComfyUI 插件使用的接口
+测试即梦AI 旧接口多图生视频（破解版）
+尝试在旧接口中传入多张图片
 """
 
 import sys
@@ -15,16 +15,16 @@ from jimeng_api_client import JimengAPIClient
 # 配置
 SESSION_ID = "eccb32e0b3ccbd3464dc0cc90dbcdca4"
 
-# 测试图片路径（WSL路径格式）- 多图测试
+# 测试图片路径（WSL路径格式）
 IMAGE_PATHS = [
     "/mnt/d/Project/seedance/uploads/materials/7161db6c-1158-48e8-a00f-45f795c50d4a.png",  # 狐奶奶
     "/mnt/d/Project/seedance/uploads/materials/bdc3e640-097b-418e-b7b4-14008f27bd8b.png"   # 包子铺内
 ]
 
-def test_old_api_multi_image():
-    """测试旧接口多图生视频"""
+def test_old_api_multi_image_hack():
+    """测试旧接口多图生视频（破解版）"""
     print("=" * 80)
-    print("即梦AI 旧接口多图生视频测试（/mweb/v1/generate_video）")
+    print("即梦AI 旧接口多图生视频测试（破解版）")
     print("=" * 80)
     print(f"\n使用图片:")
     for i, path in enumerate(IMAGE_PATHS, 1):
@@ -37,6 +37,10 @@ def test_old_api_multi_image():
     # 创建客户端
     client = JimengAPIClient(sessionid=SESSION_ID)
     
+    # 手动构造请求
+    import uuid
+    import random
+    
     # 上传图片
     print(f"\n[1/4] 正在上传图片...")
     upload_token = client._get_upload_token()
@@ -45,7 +49,6 @@ def test_old_api_multi_image():
         return
     
     image_uris = []
-    image_sizes = []
     for i, img_path in enumerate(IMAGE_PATHS, 1):
         print(f"  上传第 {i}/{len(IMAGE_PATHS)} 张图片: {img_path}")
         image_uri = client._upload_image(img_path, upload_token)
@@ -54,18 +57,15 @@ def test_old_api_multi_image():
             return
         print(f"  ✓ 上传成功，URI: {image_uri}")
         image_uris.append(image_uri)
-        
-        # 获取图片尺寸
-        from PIL import Image
+    
+    # 获取图片尺寸
+    from PIL import Image
+    image_sizes = []
+    for img_path in IMAGE_PATHS:
         with Image.open(img_path) as img:
             image_sizes.append({"width": img.width, "height": img.height})
     
-    # 构造请求
-    print(f"\n[2/4] 构造请求数据（尝试多图）...")
-    
-    import uuid
-    import random
-    
+    # 模型配置
     model_config = {
         "model_req_key": "dreamina_ic_generate_video_model_vgfm_lite",
         "benefit_type": "basic_video_operation_vgfm_lite",
@@ -75,30 +75,49 @@ def test_old_api_multi_image():
     duration_ms = 4000
     submit_id = str(uuid.uuid4())
     
-    # 【破解尝试】构造 video_gen_inputs，尝试添加 additional_images
-    video_gen_input = {
-        "prompt": "包子铺内，狐奶奶正在做着包子，包子铺内的锅上冒着蒸汽",
-        "first_frame_image": {
-            "width": image_sizes[0]["width"],
-            "height": image_sizes[0]["height"],
-            "image_uri": image_uris[0]
-        },
-        "fps": model_config["fps"],
-        "duration_ms": duration_ms,
-        "video_mode": 1,
-        "template_id": ""
+    url = f"{client.base_url}/mweb/v1/generate_video"
+    
+    babi_param = {
+        "scenario": "image_video_generation",
+        "feature_key": "image_to_video",
+        "feature_entrance": "to_video",
+        "feature_entrance_detail": "to_video-image_to_video"
     }
     
-    # 如果有第二张图，尝试添加到 additional_images
-    if len(image_uris) > 1:
-        video_gen_input["additional_images"] = []
-        for i in range(1, len(image_uris)):
-            video_gen_input["additional_images"].append({
-                "width": image_sizes[i]["width"],
-                "height": image_sizes[i]["height"],
-                "image_uri": image_uris[i]
+    # 【破解尝试】构造多个 video_gen_inputs
+    print(f"\n[2/4] 构造请求数据（尝试多图）...")
+    
+    # 方案1：在 video_gen_inputs 数组中传入多个元素
+    video_gen_inputs = []
+    for i, (image_uri, image_size) in enumerate(zip(image_uris, image_sizes)):
+        if i == 0:
+            # 第一个作为 first_frame_image
+            video_gen_inputs.append({
+                "prompt": "包子铺内，狐奶奶正在做着包子，包子铺内的锅上冒着蒸汽",
+                "first_frame_image": {
+                    "width": image_size["width"],
+                    "height": image_size["height"],
+                    "image_uri": image_uri
+                },
+                "fps": model_config["fps"],
+                "duration_ms": duration_ms,
+                "video_mode": 1,
+                "template_id": ""
             })
-        print(f"[DEBUG] 尝试添加 {len(video_gen_input['additional_images'])} 张 additional_images")
+        else:
+            # 后续图片作为 additional_images（如果支持的话）
+            # 注意：这只是尝试，不一定支持
+            video_gen_inputs[-1]["additional_images"] = video_gen_inputs[-1].get("additional_images", [])
+            video_gen_inputs[-1]["additional_images"].append({
+                "width": image_size["width"],
+                "height": image_size["height"],
+                "image_uri": image_uri
+            })
+    
+    print(f"[DEBUG] video_gen_inputs 数量: {len(video_gen_inputs)}")
+    print(f"[DEBUG] first_frame_image: {video_gen_inputs[0].get('first_frame_image', {}).get('image_uri', '')}")
+    if 'additional_images' in video_gen_inputs[0]:
+        print(f"[DEBUG] additional_images 数量: {len(video_gen_inputs[0]['additional_images'])}")
     
     data = {
         "submit_id": submit_id,
@@ -109,7 +128,7 @@ def test_old_api_multi_image():
         }),
         "http_common_info": {"aid": client.aid},
         "input": {
-            "video_gen_inputs": [video_gen_input],
+            "video_gen_inputs": video_gen_inputs,
             "priority": 0,
             "model_req_key": model_config["model_req_key"]
         },
@@ -122,20 +141,9 @@ def test_old_api_multi_image():
         }
     }
     
-    print(f"\n[DEBUG] 完整请求体:")
-    print(json.dumps(data, ensure_ascii=False, indent=2))
-    
     # 发送请求
     print(f"\n[3/4] 发送API请求...")
     token_info = client.token_manager.get_token('/mweb/v1/generate_video')
-    
-    babi_param = {
-        "scenario": "image_video_generation",
-        "feature_key": "image_to_video",
-        "feature_entrance": "to_video",
-        "feature_entrance_detail": "to_video-image_to_video"
-    }
-    
     params = {
         "babi_param": json.dumps(babi_param),
         "aid": client.aid,
@@ -154,7 +162,9 @@ def test_old_api_multi_image():
         referer='https://jimeng.jianying.com/ai-tool/video/generate'
     )
     
-    url = f"{client.base_url}/mweb/v1/generate_video"
+    print(f"\n[DEBUG] 完整请求体:")
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    
     response = client._send_request("POST", url, params=params, json=data, headers=headers)
     
     print(f"\n[DEBUG] API响应:")
@@ -164,15 +174,12 @@ def test_old_api_multi_image():
         print(f"\n❌ 视频提交失败！")
         print(f"  - 返回状态: {response.get('ret')}")
         print(f"  - 错误信息: {response.get('errmsg')}")
-        print(f"\n完整响应:")
-        print(json.dumps(response, ensure_ascii=False, indent=2))
         return
     
     # 获取 task_id
     task_id = response.get('data', {}).get('aigc_data', {}).get('task', {}).get('task_id')
     if not task_id:
         print(f"\n❌ 未获取到 task_id！")
-        print(f"  - 响应数据: {json.dumps(response.get('data', {}), ensure_ascii=False, indent=2)[:500]}...")
         return
     
     print(f"\n[SUCCESS] 视频任务提交成功！")
@@ -198,7 +205,7 @@ def test_old_api_multi_image():
         
         # 保存视频
         if result.get('video_url'):
-            video_path = f"test_old_api_multi_{int(time.time())}.mp4"
+            video_path = f"test_old_api_multi_hack_{int(time.time())}.mp4"
             print(f"\n正在下载视频到: {video_path}")
             
             import requests
@@ -209,12 +216,10 @@ def test_old_api_multi_image():
             print(f"✅ 视频已保存: {video_path}")
     else:
         print(f"❌ 视频生成失败: {result.get('error')}")
-        print(f"\n完整响应:")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
     
     print("\n" + "=" * 80)
     print("测试完成")
     print("=" * 80)
 
 if __name__ == "__main__":
-    test_old_api_multi_image()
+    test_old_api_multi_image_hack()
