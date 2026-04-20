@@ -72,10 +72,12 @@ class TokenManager:
             Cookie字符串
         """
         # 使用网页版Cookie中的原始时间戳，避免触发风控
-        # sid_guard=eccb32e0b3ccbd3464dc0cc90dbcdca4%7C1776394469%7C31536000%7CSat%2C+17-Apr-2027+02%3A54%3A29+GMT
-        timestamp = 1776394469  # 网页版的原始时间戳
+        # 更新时间戳为当前时间，避免过期
+        timestamp = int(time.time())  # 使用当前时间戳
         expire_time = timestamp + 31536000  # 1年
-        expire_date = "Sat, 17-Apr-2027 02:54:29 GMT"  # 网页版的过期时间
+        from datetime import datetime, timezone, timedelta
+        expire_date_obj = datetime.fromtimestamp(expire_time, tz=timezone.utc)
+        expire_date = expire_date_obj.strftime("%a, %d-%b-%Y %H:%M:%S GMT")
         
         cookie_parts = [
             f"sessionid={self.sessionid}",
@@ -86,7 +88,7 @@ class TokenManager:
             f"uid_tt={self.user_id}",
             f"uid_tt_ss={self.user_id}",
             f"sid_tt={self.sessionid}",
-            f"sid_guard={self.sessionid}%7C{timestamp}%7C31536000%7C{expire_date.replace(' ', '+')}",
+            f"sid_guard={self.sessionid}%7C{timestamp}%7C31536000%7CSat%2C+17-Apr-2027+02%3A54%3A29+GMT",
             f"ssid_ucp_v1=1.0.0-{hashlib.md5((self.sessionid + str(timestamp)).encode()).hexdigest()}",
             f"sid_ucp_v1=1.0.0-{hashlib.md5((self.sessionid + str(timestamp)).encode()).hexdigest()}",
             "store-region=cn-gd",
@@ -151,7 +153,7 @@ class TokenManager:
             'pf': self.platform_code,
             'priority': 'u=1, i',
             'referer': referer,
-            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
+            'sec-ch-ua': '"Chromium";v="131", "Not=A?Brand";v="24", "Google Chrome";v="131"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'sec-fetch-dest': 'empty',
@@ -160,7 +162,7 @@ class TokenManager:
             'sign': token_info["sign"],
             'sign-ver': '1',
             'tdid': '',  # 设备ID，留空即可
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         }
         
         # msToken 和 a_bogus 放在 URL 参数中，不再放在 headers 中

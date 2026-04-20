@@ -973,11 +973,19 @@ class JimengAPIClient:
                 }
             
             # 模型配置 - s2.0使用dreamina_video_seedance_20_pro
+            # 注意：root_model 使用 dreamina_seedance_40_pro
             model_map = {
-                "s2.0": "dreamina_video_seedance_20_pro",     # Seedance 2.0 普通版
+                "s2.0": "dreamina_video_seedance_20_pro",     # Seedance 2.0 普通版（benefit_type）
                 "s2.0p": "dreamina_seedance_40_vision"        # Seedance 2.0 Fast VIP
             }
             model_req_key = model_map.get(model, "dreamina_video_seedance_20_pro")
+            
+            # root_model 映射（与 model_req_key 不同）
+            root_model_map = {
+                "s2.0": "dreamina_seedance_40_pro",      # ← 网页版使用的值
+                "s2.0p": "dreamina_seedance_40_vision"
+            }
+            root_model = root_model_map.get(model, "dreamina_seedance_40_pro")
             
             # 根据模型选择benefit_type
             benefit_type_map = {
@@ -1179,15 +1187,18 @@ class JimengAPIClient:
                                     "id": video_gen_input_id,
                                     "min_version": "3.3.9",
                                     "prompt": "",
+                                    "vid": "",  # ← 添加 vid 字段（网页版有）
                                     "video_mode": 2,
                                     "fps": 24,
                                     "duration_ms": duration_ms,
                                     "idip_meta_list": [],
-                                    "unified_edit_input": unified_edit_input
+                                    "unified_edit_input": unified_edit_input,
+                                    "video_aspect_ratio": ratio,  # 直接使用原始比例值（如 "16:9"）
+                                    "model_req_key": root_model  # ← 这里也用 root_model
                                 }],
-                                "video_aspect_ratio": ratio,
+                                "video_aspect_ratio": ratio,  # 直接使用原始比例值
                                 "seed": random.randint(1000000000, 9999999999),
-                                "model_req_key": model_req_key,
+                                "model_req_key": root_model,  # ← 使用 root_model
                                 "priority": 0
                             },
                             "video_task_extra": json.dumps({
@@ -1201,12 +1212,12 @@ class JimengAPIClient:
                                     "type": "video",
                                     "scene": "BasicVideoGenerateButton",
                                     "resolution": "720p",
-                                    "modelReqKey": model_req_key,
+                                    "modelReqKey": root_model,  # ← 使用 root_model
                                     "videoDuration": duration,
                                     "reportParams": {
                                         "enterSource": "generate",
                                         "vipSource": "generate",
-                                        "extraVipFunctionKey": f"{model_req_key}-720p",
+                                        "extraVipFunctionKey": f"{root_model}-720p",  # ← 使用 root_model
                                         "useVipFunctionDetailsReporterHoc": True
                                     },
                                     "materialTypes": [1]
@@ -1220,7 +1231,7 @@ class JimengAPIClient:
             
             data = {
                 "extend": {
-                    "root_model": model_req_key,
+                    "root_model": root_model,  # ← 使用 root_model
                     "workspace_id": 0,
                     "m_video_commerce_info": {
                         "benefit_type": benefit_type,
@@ -1237,12 +1248,12 @@ class JimengAPIClient:
                 },
                 "submit_id": submit_id,
                 "metrics_extra": json.dumps({
+                    "promptSource": "custom",  # ← 添加 promptSource
                     "isDefaultSeed": 1,
                     "originSubmitId": submit_id,
-                    "isRegenerate": False,
+                    "isRegenerate": True,  # ← 改为 True（网页版是重新生成）
                     "enterFrom": "click",
-                    "position": "page_bottom_box",
-                    "functionMode": "omni_reference",
+                    "functionMode": "omni_reference",  # ← 删除 position 字段
                     "sceneOptions": json.dumps([{
                         "type": "video",
                         "scene": "BasicVideoGenerateButton",
@@ -1288,14 +1299,131 @@ class JimengAPIClient:
             )
             
             print(f"\n[4/4] 发送API请求...")
-            response = self._send_request("POST", url, params=params, json=data, headers=headers)
             
+            # [ANTI-RISK] 添加随机延迟，模拟真实用户操作，避免服务器过载
+            delay = random.uniform(5.0, 8.0)  # 5-8秒随机延迟（增加延迟）
+            print(f"\n[ANTI-RISK] 添加延迟 {delay:.2f} 秒（避免服务器过载）...")
+            time.sleep(delay)
+            
+            # [DEBUG] 打印完整的请求参数
+            print("\n" + "="*80)
+            print("[DEBUG] 完整请求参数:")
+            print("="*80)
+            print(f"URL: {url}")
+            print(f"\nParams:")
+            print(json.dumps(params, ensure_ascii=False, indent=2))
+            print(f"\nRequest Body (关键部分):")
+            print(f"  - model_req_key: {model_req_key}")
+            print(f"  - benefit_type: {benefit_type}")
+            print(f"  - submit_id: {data.get('submit_id')}")
+            
+            # 打印 draft_content 中的关键信息
+            draft_content = json.loads(data.get('draft_content', '{}'))
+            if 'component_list' in draft_content:
+                component = draft_content['component_list'][0]
+                if 'abilities' in component:
+                    gen_video = component['abilities'].get('gen_video', {})
+                    text_to_video = gen_video.get('text_to_video_params', {})
+                    video_gen_input = text_to_video.get('video_gen_inputs', [{}])[0]
+                    print(f"\n  - video_gen_inputs:")
+                    print(f"    - model_req_key: {video_gen_input.get('model_req_key')}")
+                    print(f"    - video_aspect_ratio: {video_gen_input.get('video_aspect_ratio')}")
+                    print(f"    - duration_ms: {video_gen_input.get('duration_ms')}")
+                    print(f"    - meta_list 数量: {len(text_to_video.get('unified_edit_input', {}).get('meta_list', []))}")
+            
+            print(f"\n  - commerce_info (extend.m_video_commerce_info):")
+            print(f"    - benefit_type: {data.get('extend', {}).get('m_video_commerce_info', {}).get('benefit_type')}")
+            
+            # [DEBUG] 打印 unified_edit_input 的内容
+            print(f"\n  - unified_edit_input:")
+            print(f"    - material_list 数量: {len(unified_edit_input.get('material_list', []))}")
+            print(f"    - meta_list 数量: {len(unified_edit_input.get('meta_list', []))}")
+            print("="*80 + "\n")
+            
+            # [重试机制] 4013错误时重试
+            max_retries = 3
+            response = None
+            
+            for attempt in range(max_retries):
+                if attempt > 0:
+                    print(f"\n[重试 {attempt}/{max_retries-1}] 4013错误，等待后重试...")
+                    retry_delay = random.uniform(10.0, 15.0)
+                    print(f"[INFO] 等待 {retry_delay:.2f} 秒...")
+                    time.sleep(retry_delay)
+                    
+                    # 重新生成 token
+                    token_info = self.token_manager.get_token('/mweb/v1/aigc_draft/generate')
+                    params = {
+                        "aid": self.aid,
+                        "device_platform": "web",
+                        "region": "cn",
+                        "webId": self.token_manager.web_id,
+                        "da_version": "3.3.12",
+                        "os": "windows",
+                        "web_component_open_flag": "1",
+                        "commerce_with_input_video": "1",
+                        "web_version": "7.5.0",
+                        "aigc_features": "app_lip_sync"
+                    }
+                    
+                    if token_info.get("msToken"):
+                        params["msToken"] = token_info["msToken"]
+                    if token_info.get("a_bogus"):
+                        params["a_bogus"] = token_info["a_bogus"]
+                    
+                    headers, _ = self.token_manager.get_headers(
+                        '/mweb/v1/aigc_draft/generate',
+                        referer='https://jimeng.jianying.com/ai-tool/generate?type=video',
+                        token_info=token_info
+                    )
+                    
+                    print(f"[INFO] 重新发送请求...")
+                
+                response = self._send_request("POST", url, params=params, json=data, headers=headers)
+                
+                # 如果成功或者不是4013，退出循环
+                if response and str(response.get('ret')) == '0':
+                    break
+                if response and str(response.get('ret')) != '4013':
+                    break
+                
+                # 是4013，继续重试
+                print(f"[WARNING] 收到 4013 错误，将重试...")
+            
+            # [DEBUG] 打印完整响应
             if not response or str(response.get('ret')) != '0':
-                logger.error(f"[Jimeng] 多图视频生成失败: {response}")
-                return {
-                    "success": False,
-                    "error": f"API返回错误: {response}"
-                }
+                print("\n" + "="*80)
+                print("[DEBUG] API 响应:")
+                print("="*80)
+                print(json.dumps(response, ensure_ascii=False, indent=2))
+                print("="*80 + "\n")
+                
+                # 即使返回4013，也尝试获取 history_id（任务可能已经进入排队）
+                aigc_data = response.get('data', {}).get('aigc_data')
+                history_id = None
+                
+                if aigc_data and isinstance(aigc_data, dict):
+                    history_id = aigc_data.get('history_record_id')
+                
+                if history_id:
+                    print(f"\n[WARNING] API返回错误，但获取到 history_id: {history_id}")
+                    print(f"[INFO] 任务可能已进入排队状态，尝试轮询...")
+                    logger.warning(f"[Jimeng] API返回错误，但任务已提交，history_id: {history_id}")
+                    
+                    # 等待一段时间后轮询
+                    print(f"\n[INFO] 等待 10 秒后开始轮询...")
+                    time.sleep(10)
+                    
+                    # 轮询等待视频生成
+                    return self._poll_video_result_by_history(history_id, max_wait_time=600, check_interval=10)
+                else:
+                    logger.error(f"[Jimeng] 多图视频生成失败: {response}")
+                    print(f"\n[ERROR] API返回 4013，且没有返回 history_id")
+                    print(f"[INFO] 这说明任务未提交成功，请稍后重试或去网页版手动生成一次")
+                    return {
+                        "success": False,
+                        "error": f"API返回错误: {response.get('errmsg', '未知错误')}"
+                    }
             
             # 获取history_id
             history_id = response.get('data', {}).get('aigc_data', {}).get('history_record_id')
