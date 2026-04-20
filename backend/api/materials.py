@@ -11,7 +11,7 @@ from database import get_db
 from models.material import Material, MaterialSourceEnum, MaterialTypeEnum
 from schemas.material import MaterialListResponse, MaterialResponse
 
-router = APIRouter(prefix="/materials", tags=["绱犳潗绠＄悊"])
+router = APIRouter(prefix="/materials", tags=["素材管理"])
 
 BASE_DIR = Path(__file__).parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads" / "materials"
@@ -26,6 +26,7 @@ async def list_materials(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """获取素材列表"""
     query = db.query(Material)
 
     if type:
@@ -50,21 +51,26 @@ async def upload_material(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """上传素材"""
+    # 验证文件类型
     if type == "image" and not (file.content_type or "").startswith("image/"):
-        raise HTTPException(status_code=400, detail="鍙兘涓婁紶鍥剧墖鏂囦欢")
+        raise HTTPException(status_code=400, detail="只能上传图片文件")
 
     if type == "video" and not (file.content_type or "").startswith("video/"):
-        raise HTTPException(status_code=400, detail="鍙兘涓婁紶瑙嗛鏂囦欢")
+        raise HTTPException(status_code=400, detail="只能上传视频文件")
 
+    # 生成唯一文件名
     original_name = (file.filename or "").replace("\\", "/").split("/")[-1].strip()
     ext = os.path.splitext(original_name)[1]
     unique_filename = f"{uuid.uuid4()}{ext}"
     file_path = UPLOAD_DIR / unique_filename
 
+    # 保存文件
     with open(file_path, "wb") as buffer:
         content = await file.read()
         buffer.write(content)
 
+    # 创建素材记录
     material = Material(
         name=unique_filename,  # 使用真实文件名（UUID格式）
         type=MaterialTypeEnum.image if type == "image" else MaterialTypeEnum.video,
@@ -88,14 +94,16 @@ async def delete_material(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """删除素材"""
     material = db.query(Material).filter(Material.id == material_id).first()
     if not material:
-        raise HTTPException(status_code=404, detail="绱犳潗涓嶅瓨鍦?)
+        raise HTTPException(status_code=404, detail="素材不存在")
 
+    # 删除物理文件
     if os.path.exists(material.file_path):
         os.remove(material.file_path)
 
     db.delete(material)
     db.commit()
 
-    return {"message": "鍒犻櫎鎴愬姛"}
+    return {"message": "删除成功"}
