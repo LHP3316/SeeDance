@@ -48,6 +48,18 @@ config_example.yaml
 
 # 日志
 *.log
+logs/
+backend/logs/
+
+# PID文件
+*.pid
+
+# 上传文件
+uploads/
+
+# Node modules
+node_modules/
+frontend/node_modules/
 
 # 调试文件
 debug_*.py
