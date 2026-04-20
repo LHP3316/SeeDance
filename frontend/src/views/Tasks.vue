@@ -103,6 +103,7 @@
               placeholder="请输入图片描述，输入 @ 可引用已上传的图片"
               @input="handlePromptInput"
               ref="promptInputRef"
+              style="width: 100%"
             />
             
             <!-- @图片选择下拉框 -->
