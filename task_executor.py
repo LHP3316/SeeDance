@@ -441,7 +441,7 @@ class TaskExecutor:
         logger.info(f"  - 模型: {task.model}")
         logger.info(f"  - 比例: {task.ratio}")
         logger.info(f"  - 时长: {task.duration}秒")
-        logger.info(f"  - 提示词: {task.prompt}")  # 完整显示提示词
+        logger.info(f"  - 原始提示词: {task.prompt}")  # 显示原始提示词（包含 @引用）
         
         result = {
             "success": False,
@@ -531,7 +531,10 @@ class TaskExecutor:
                     else:
                         logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
                         
-                        # 3. 调用即梦多图视频API（直接使用原始提示词）
+                        # 3. 调用即梦多图视频API（使用包含 @引用的原始提示词）
+                        # 提示词格式：@filename1.png是描述1，@filename2.png是描述2，其他文本
+                        logger.info(f"使用原始提示词（包含 @引用）: {task.prompt}")
+                        
                         api_result = self.jimeng_client.generate_multi_image_to_video(
                             image_paths=local_image_paths,
                             prompt=task.prompt,  # 直接使用原始提示词，包含 @引用

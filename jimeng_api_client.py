@@ -972,17 +972,17 @@ class JimengAPIClient:
                     "error": "最多支持12张图片"
                 }
             
-            # 模型配置
+            # 模型配置 - s2.0使用dreamina_video_seedance_20_pro
             model_map = {
-                "s2.0": "dreamina_seedance_40_pro",         # Seedance 2.0 普通版
-                "s2.0p": "dreamina_seedance_40_vision"      # Seedance 2.0 Fast VIP
+                "s2.0": "dreamina_video_seedance_20_pro",     # Seedance 2.0 普通版
+                "s2.0p": "dreamina_seedance_40_vision"        # Seedance 2.0 Fast VIP
             }
-            model_req_key = model_map.get(model, "dreamina_seedance_40_pro")
+            model_req_key = model_map.get(model, "dreamina_video_seedance_20_pro")
             
             # 根据模型选择benefit_type
             benefit_type_map = {
-                "s2.0": "dreamina_video_seedance_20_pro",   # Seedance 2.0 普通版
-                "s2.0p": "seedance_20_fast_720p_output"     # Fast VIP版
+                "s2.0": "dreamina_video_seedance_20_pro",     # Seedance 2.0 普通版
+                "s2.0p": "seedance_20_fast_720p_output"       # Fast VIP版
             }
             benefit_type = benefit_type_map.get(model, "dreamina_video_seedance_20_pro")
             
@@ -1070,8 +1070,11 @@ class JimengAPIClient:
             for filename, desc in matches:
                 image_descriptions_map[filename] = desc.strip()
             
-            # 提取纯文本提示词（去掉所有 @引用）
-            pure_prompt = re.sub(r'@[^，,。；;\s]+是', '', prompt).strip()
+            # 提取纯文本提示词（去掉所有 @引用是描述 的完整部分）
+            # 需要去掉整个 @filename.png是描述，而不仅仅是 @filename.png是
+            pure_prompt = re.sub(r'@[^，,。；;\s]+是[^，,。；;]+[,，]?', '', prompt).strip()
+            # 去掉开头可能的逗号
+            pure_prompt = pure_prompt.lstrip('，,').strip()
             
             # 构造meta_list（文本和图片引用交替）
             meta_list = []
@@ -1264,8 +1267,9 @@ class JimengAPIClient:
                 "aid": self.aid,
                 "device_platform": "web",
                 "region": "cn",
-                "web_id": self.token_manager.web_id,
+                "webId": self.token_manager.web_id,  # ← 改为 webId（大写I）
                 "da_version": "3.3.12",
+                "os": "windows",
                 "web_component_open_flag": "1",
                 "commerce_with_input_video": "1",
                 "web_version": "7.5.0",

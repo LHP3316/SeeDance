@@ -151,7 +151,7 @@ class TokenManager:
             'pf': self.platform_code,
             'priority': 'u=1, i',
             'referer': referer,
-            'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+            'sec-ch-ua': '"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'sec-fetch-dest': 'empty',
@@ -160,7 +160,7 @@ class TokenManager:
             'sign': token_info["sign"],
             'sign-ver': '1',
             'tdid': '',  # 设备ID，留空即可
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
         }
         
         # msToken 和 a_bogus 放在 URL 参数中，不再放在 headers 中
