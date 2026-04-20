@@ -60,6 +60,9 @@ backend/logs/
 # 上传文件
 uploads/
 
+# 浏览器数据（Playwright 持久化登录）
+browser_data/
+
 # Node modules
 node_modules/
 frontend/node_modules/

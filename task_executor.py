@@ -50,6 +50,7 @@ from backend.models.material import Material
 from backend.config import settings
 from backend.database import Base
 from jimeng_api_client import JimengAPIClient
+from jimeng_web_video_plugin import JimengWebVideoPlugin
 
 # 配置日志
 LOG_DIR = Path(__file__).parent / "logs"
@@ -156,6 +157,10 @@ class TaskExecutor:
         
         # 即梦API客户端
         self.jimeng_client = JimengAPIClient(sessionid=session_id)
+        
+        # 即梦Web视频插件（浏览器自动化）
+        self.web_plugin = None
+        self.web_plugin_enabled = False  # 是否启用插件模式
         
         # 输出目录
         self.output_dir = Path(__file__).parent / "output"
@@ -453,6 +458,34 @@ class TaskExecutor:
         }
         
         try:
+            # 判断使用哪种方式生成视频
+            use_web_plugin = self.web_plugin_enabled or (task.params and 'web_plugin' in task.params)
+            
+            if use_web_plugin:
+                # 使用 Web 插件（浏览器自动化）
+                logger.info("🌐 使用 Web 插件模式（浏览器自动化）")
+                result = self._execute_video_task_web_plugin(task)
+            else:
+                # 使用 API 调用（默认）
+                logger.info("⚡ 使用 API 调用模式")
+                result = self._execute_video_task_api(task)
+            
+        except Exception as e:
+            result["error"] = str(e)
+            logger.error(f"执行视频任务异常: {e}", exc_info=True)
+        
+        return result
+    
+    def _execute_video_task_api(self, task) -> Dict:
+        """
+        使用 API 调用执行视频任务（原有逻辑）
+        
+        Args:
+            task: 任务对象
+            
+        Returns:
+            执行结果
+        """
             # 判断任务类型（文生视频 vs 图生视频）
             has_reference_images = False
             reference_images = []
@@ -605,6 +638,145 @@ class TaskExecutor:
         except Exception as e:
             result["error"] = str(e)
             logger.error(f"执行视频任务异常: {e}", exc_info=True)
+        
+        return result
+    
+    def _execute_video_task_web_plugin(self, task) -> Dict:
+        """
+        使用 Web 插件（浏览器自动化）执行视频任务
+        
+        Args:
+            task: 任务对象
+            
+        Returns:
+            执行结果
+        """
+        logger.info(f"开始执行视频任务（Web插件） [ID:{task.id}] - {task.name}")
+        
+        result = {
+            "success": False,
+            "history_id": None,
+            "video_url": None,
+            "saved_file": None,
+            "error": None,
+            "api_response": None
+        }
+        
+        try:
+            # 1. 获取图片路径
+            session = self.Session()
+            try:
+                from sqlalchemy import text
+                query_result = session.execute(
+                    text("""
+                        SELECT ti.image_id, ti.reference_name, m.file_url 
+                        FROM task_images ti 
+                        LEFT JOIN materials m ON ti.image_id = m.id 
+                        WHERE ti.task_id = :task_id 
+                        ORDER BY ti.sort_order
+                    """),
+                    {"task_id": task.id}
+                )
+                rows = query_result.fetchall()
+            finally:
+                session.close()
+            
+            if not rows:
+                result["error"] = "未找到图片素材"
+                logger.error(result["error"])
+                return result
+            
+            logger.info(f"获取到 {len(rows)} 个图片素材")
+            
+            # 2. 下载图片到本地
+            local_image_paths = []
+            
+            for row in rows:
+                image_id = row[0]
+                reference_name = row[1]
+                file_url = row[2]
+                
+                logger.info(f"下载图片素材: {reference_name} ({file_url})")
+                
+                local_path = self._download_material_image(file_url, reference_name)
+                if local_path:
+                    local_image_paths.append(local_path)
+                    logger.info(f"  ✓ 图片已下载: {local_path}")
+                else:
+                    logger.error(f"  ✗ 图片下载失败: {reference_name}")
+            
+            if len(local_image_paths) != len(rows):
+                result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
+                logger.error(result["error"])
+                return result
+            
+            logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
+            
+            # 3. 解析任务参数
+            import json
+            params = {}
+            if task.params:
+                try:
+                    params = json.loads(task.params)
+                except:
+                    pass
+            
+            # 获取插件配置
+            browser_exe = params.get('browser_exe')
+            model = params.get('model', 'seedance-2.0')
+            generation_mode = params.get('generation_mode', 'omni_reference')
+            timeout = params.get('timeout', 900)
+            
+            # 4. 初始化插件
+            if not self.web_plugin:
+                self.web_plugin = JimengWebVideoPlugin(
+                    browser_exe=browser_exe,
+                    headless=False  # 显示浏览器，方便调试
+                )
+            
+            # 5. 调用插件生成视频
+            logger.info(f"调用 Web 插件生成视频...")
+            logger.info(f"  - 模型: {model}")
+            logger.info(f"  - 比例: {task.ratio}")
+            logger.info(f"  - 时长: {task.duration}秒")
+            logger.info(f"  - 生成模式: {generation_mode}")
+            logger.info(f"  - 超时: {timeout}秒")
+            
+            plugin_result = self.web_plugin.generate_video(
+                image_paths=local_image_paths,
+                prompt=task.prompt,
+                model=model,
+                ratio=task.ratio,
+                duration=task.duration or 5,
+                generation_mode=generation_mode,
+                timeout=timeout
+            )
+            
+            result["api_response"] = plugin_result
+            
+            if plugin_result.get("success"):
+                result["success"] = True
+                result["video_url"] = plugin_result.get("video_url")
+                
+                logger.info(f"插件调用成功，视频URL: {result['video_url']}")
+                
+                # 下载并保存视频
+                if result["video_url"]:
+                    saved_path = self._download_and_save_video(
+                        url=result["video_url"],
+                        task_id=task.id,
+                        task_name=task.name
+                    )
+                    if saved_path:
+                        result["saved_file"] = saved_path
+                        logger.info(f"  ✓ 视频已保存: {saved_path}")
+            else:
+                result["error"] = plugin_result.get("error", "插件调用失败")
+                logger.error(f"插件调用失败: {result['error']}")
+            
+        except Exception as e:
+            result["error"] = str(e)
+            logger.error(f"Web插件执行视频任务异常: {e}", exc_info=True)
         
         return result
     
