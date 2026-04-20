@@ -509,7 +509,6 @@ class TaskExecutor:
                     
                     # 2. 下载图片到本地
                     local_image_paths = []
-                    image_descriptions = []
                     
                     for row in rows:
                         image_id = row[0]
@@ -523,12 +522,6 @@ class TaskExecutor:
                         if local_path:
                             local_image_paths.append(local_path)
                             logger.info(f"  ✓ 图片已下载: {local_path}")
-                            
-                            # 从提示词中提取该图片的描述
-                            # 提示词格式: @filename.png是描述，@filename2.png是描述2
-                            description = self._extract_image_description(task.prompt, reference_name)
-                            image_descriptions.append(description)
-                            logger.info(f"  - 图片描述: {description}")
                         else:
                             logger.error(f"  ✗ 图片下载失败: {reference_name}")
                     
@@ -538,15 +531,10 @@ class TaskExecutor:
                     else:
                         logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
                         
-                        # 3. 提取纯文本提示词（去掉 @引用）
-                        pure_prompt = self._extract_pure_prompt(task.prompt)
-                        logger.info(f"纯文本提示词: {pure_prompt}")
-                        
-                        # 4. 调用即梦多图视频API
+                        # 3. 调用即梦多图视频API（直接使用原始提示词）
                         api_result = self.jimeng_client.generate_multi_image_to_video(
                             image_paths=local_image_paths,
-                            prompt=pure_prompt,
-                            image_descriptions=image_descriptions,
+                            prompt=task.prompt,  # 直接使用原始提示词，包含 @引用
                             model=task.model,
                             ratio=task.ratio,
                             duration=task.duration or 4

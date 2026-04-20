@@ -921,7 +921,6 @@ class JimengAPIClient:
     
     def generate_multi_image_to_video(self, image_paths: List[str], 
                                        prompt: str,
-                                       image_descriptions: List[str],
                                        model: str = "s2.0", 
                                        ratio: str = "16:9", 
                                        duration: int = 4) -> Dict:
@@ -930,8 +929,7 @@ class JimengAPIClient:
         
         Args:
             image_paths: 本地图片路径列表，如 ["C:/Users/Administrator/Desktop/奶奶.png", ...]
-            prompt: 提示词文本（不包含@引用，只包含纯文本描述）
-            image_descriptions: 每张图片的描述列表，如 ["是奶奶", "是狐小九", "是铁爪", "是包子铺内"]
+            prompt: 提示词文本（包含 @引用，格式: @filename1.png是描述1，@filename2.png是描述2）
             model: 视频模型 (s2.0, s2.0p)
             ratio: 视频比例 (16:9, 9:16, 1:1, 4:3, 3:4)
             duration: 视频时长（秒），默认4秒
@@ -952,8 +950,7 @@ class JimengAPIClient:
             ...         "C:/Users/Administrator/Desktop/铁爪.png",
             ...         "C:/Users/Administrator/Desktop/包子铺内.png"
             ...     ],
-            ...     prompt="赛璐璐风格动画，无字幕无配乐无标识，多景别运用，电影级运镜",
-            ...     image_descriptions=["是奶奶", "是狐小九", "是铁爪", "是包子铺内"],
+            ...     prompt="@奶奶.png是奶奶，@狐小九.png是狐小九，赛璐璐风格动画，无字幕无配乐无标识",
             ...     model="s2.0",
             ...     ratio="16:9",
             ...     duration=4
@@ -963,19 +960,12 @@ class JimengAPIClient:
             print(f"\n[1/4] 开始多图引用视频生成...")
             print(f"  - 图片数量: {len(image_paths)}")
             print(f"  - 提示词: {prompt}")
-            print(f"  - 图片描述: {image_descriptions}")
             print(f"  - 模型: {model}")
             print(f"  - 比例: {ratio}")
             print(f"  - 时长: {duration}秒")
             logger.info(f"[Jimeng] 开始多图引用视频生成 - 图片数量: {len(image_paths)}")
             
             # 验证参数
-            if len(image_paths) != len(image_descriptions):
-                return {
-                    "success": False,
-                    "error": f"图片数量({len(image_paths)})与描述数量({len(image_descriptions)})不匹配"
-                }
-            
             if len(image_paths) > 12:
                 return {
                     "success": False,
@@ -984,17 +974,17 @@ class JimengAPIClient:
             
             # 模型配置
             model_map = {
-                "s2.0": "dreamina_seedance_40_vision",
-                "s2.0p": "dreamina_seedance_40_vision"
+                "s2.0": "dreamina_seedance_40_pro",         # Seedance 2.0 普通版
+                "s2.0p": "dreamina_seedance_40_vision"      # Seedance 2.0 Fast VIP
             }
-            model_req_key = model_map.get(model, "dreamina_seedance_40_vision")
+            model_req_key = model_map.get(model, "dreamina_seedance_40_pro")
             
-            # 根据模型选择benefit_type（s2.0用普通版，s2.0p用Fast VIP版）
+            # 根据模型选择benefit_type
             benefit_type_map = {
-                "s2.0": "seedance_20_720p_output",        # 普通版
-                "s2.0p": "seedance_20_fast_720p_output"   # Fast VIP版
+                "s2.0": "dreamina_video_seedance_20_pro",   # Seedance 2.0 普通版
+                "s2.0p": "seedance_20_fast_720p_output"     # Fast VIP版
             }
-            benefit_type = benefit_type_map.get(model, "seedance_20_720p_output")
+            benefit_type = benefit_type_map.get(model, "dreamina_video_seedance_20_pro")
             
             duration_ms = duration * 1000
             if duration_ms not in [4000, 5000]:
@@ -1018,11 +1008,18 @@ class JimengAPIClient:
             
             # 上传所有图片并收集URI
             material_list = []
+            image_uri_map = {}  # 文件名 -> URI 映射
+            
             for i, img_path in enumerate(image_paths):
                 print(f"  上传第 {i+1}/{len(image_paths)} 张图片: {img_path}")
                 image_uri = self._upload_image(img_path, upload_token)
                 if not image_uri:
                     return {"success": False, "error": f"上传图片失败: {img_path}"}
+                
+                # 获取原始文件名（不带路径）
+                import os
+                filename = os.path.basename(img_path)
+                image_uri_map[filename] = image_uri
                 
                 # 获取图片元数据
                 try:
@@ -1060,20 +1057,30 @@ class JimengAPIClient:
             
             print(f"\n[3/4] 构造请求数据...")
             
+            # 从 prompt 中提取图片描述
+            # prompt格式: @filename1.png是描述1，@filename2.png是描述2，其他文本
+            import re
+            
+            # 匹配 @filename.png是描述 的模式
+            pattern = r'@([^，,。；;\s]+)是([^，,。；;]+)'
+            matches = re.findall(pattern, prompt)
+            
+            # 构造 image_descriptions 映射: 文件名 -> 描述
+            image_descriptions_map = {}
+            for filename, desc in matches:
+                image_descriptions_map[filename] = desc.strip()
+            
+            # 提取纯文本提示词（去掉所有 @引用）
+            pure_prompt = re.sub(r'@[^，,。；;\s]+是', '', prompt).strip()
+            
             # 构造meta_list（文本和图片引用交替）
             meta_list = []
             
-            # 先添加主提示词
-            if prompt:
-                meta_list.append({
-                    "type": "",
-                    "id": str(uuid.uuid4()),
-                    "meta_type": "text",
-                    "text": prompt
-                })
-            
             # 然后交替添加图片和描述
-            for i, (material, desc) in enumerate(zip(material_list, image_descriptions)):
+            for i, img_path in enumerate(image_paths):
+                import os
+                filename = os.path.basename(img_path)
+                
                 # 添加图片引用
                 meta_list.append({
                     "type": "",
@@ -1083,11 +1090,12 @@ class JimengAPIClient:
                     "material_ref": {
                         "type": "",
                         "id": str(uuid.uuid4()),
-                        "material_idx": i + 1  # 从1开始索引
+                        "material_idx": i  # 从0开始索引
                     }
                 })
                 
                 # 添加图片描述
+                desc = image_descriptions_map.get(filename, "")
                 if desc:
                     meta_list.append({
                         "type": "",
@@ -1095,6 +1103,22 @@ class JimengAPIClient:
                         "meta_type": "text",
                         "text": desc
                     })
+            
+            # 最后添加纯文本提示词（如果有的话）
+            if pure_prompt:
+                meta_list.append({
+                    "type": "",
+                    "id": str(uuid.uuid4()),
+                    "meta_type": "text",
+                    "text": pure_prompt
+                })
+            
+            unified_edit_input = {
+                "type": "",
+                "id": str(uuid.uuid4()),
+                "material_list": material_list,
+                "meta_list": meta_list
+            }
             
             # 使用与浏览器相同的API端点
             url = f"{self.base_url}/mweb/v1/aigc_draft/generate"
@@ -1147,12 +1171,7 @@ class JimengAPIClient:
                                     "fps": 24,
                                     "duration_ms": duration_ms,
                                     "idip_meta_list": [],
-                                    "unified_edit_input": {
-                                        "type": "",
-                                        "id": unified_edit_id,
-                                        "material_list": material_list,
-                                        "meta_list": meta_list
-                                    }
+                                    "unified_edit_input": unified_edit_input
                                 }],
                                 "video_aspect_ratio": ratio,
                                 "seed": random.randint(1000000000, 9999999999),
@@ -1165,7 +1184,21 @@ class JimengAPIClient:
                                 "isRegenerate": False,
                                 "enterFrom": "click",
                                 "position": "page_bottom_box",
-                                "functionMode": "omni_reference"
+                                "functionMode": "omni_reference",
+                                "sceneOptions": json.dumps([{
+                                    "type": "video",
+                                    "scene": "BasicVideoGenerateButton",
+                                    "resolution": "720p",
+                                    "modelReqKey": model_req_key,
+                                    "videoDuration": duration,
+                                    "reportParams": {
+                                        "enterSource": "generate",
+                                        "vipSource": "generate",
+                                        "extraVipFunctionKey": f"{model_req_key}-720p",
+                                        "useVipFunctionDetailsReporterHoc": True
+                                    },
+                                    "materialTypes": [1]
+                                }])
                             })
                         }
                     },
@@ -1293,19 +1326,19 @@ class JimengAPIClient:
             
             # 模型配置 - 使用正确的模型key
             model_map = {
-                "s2.0": "dreamina_seedance_40_vision",
-                "s2.0p": "dreamina_seedance_40_vision",
+                "s2.0": "dreamina_seedance_40_pro",         # Seedance 2.0 普通版
+                "s2.0p": "dreamina_seedance_40_vision",     # Seedance 2.0 Fast VIP
                 "p2.0p": "dreamina_ailab_generate_video_model_v1.4"
             }
-            model_req_key = model_map.get(model, "dreamina_seedance_40_vision")
+            model_req_key = model_map.get(model, "dreamina_seedance_40_pro")
             
-            # 根据模型选择benefit_type（s2.0用普通版，s2.0p用Fast VIP版）
+            # 根据模型选择benefit_type
             benefit_type_map = {
-                "s2.0": "seedance_20_720p_output",        # 普通版
-                "s2.0p": "seedance_20_fast_720p_output",  # Fast VIP版
-                "p2.0p": "basic_video_operation_vgfm"     # p2.0p专用
+                "s2.0": "dreamina_video_seedance_20_pro",   # Seedance 2.0 普通版
+                "s2.0p": "seedance_20_fast_720p_output",    # Fast VIP版
+                "p2.0p": "basic_video_operation_vgfm"        # p2.0p专用
             }
-            benefit_type = benefit_type_map.get(model, "seedance_20_720p_output")
+            benefit_type = benefit_type_map.get(model, "dreamina_video_seedance_20_pro")
             
             duration_ms = duration * 1000
             if duration_ms not in [4000, 5000]:
@@ -1639,6 +1672,67 @@ class JimengAPIClient:
                 "error": str(e)
             }
     
+    def _get_history_queue_info(self, history_id: str) -> Optional[Dict]:
+        """
+        获取任务排队信息
+        
+        Args:
+            history_id: 历史记录ID
+            
+        Returns:
+            排队信息，格式：
+            {
+                "history_id": {
+                    "status": 0,
+                    "queue_info": {
+                        "queue_idx": 26885,
+                        "priority": 3,
+                        "queue_status": 1,
+                        "queue_length": 362280,
+                        "polling_config": {
+                            "interval_seconds": 30,
+                            "timeout_seconds": 86400
+                        }
+                    },
+                    "forecast_cost_time": {
+                        "forecast_generate_cost": 35159,
+                        "forecast_queue_cost": 17978
+                    }
+                }
+            }
+        """
+        try:
+            url = f"{self.base_url}/mweb/v1/get_history_queue_info"
+            
+            token_info = self.token_manager.get_token('/mweb/v1/get_history_queue_info')
+            params = {
+                "aid": self.aid,
+                "device_platform": "web",
+                "region": "cn",
+                "web_id": self.token_manager.web_id,
+            }
+            
+            if token_info.get("msToken"):
+                params["msToken"] = token_info["msToken"]
+            if token_info.get("a_bogus"):
+                params["a_bogus"] = token_info["a_bogus"]
+            
+            data = {
+                "history_ids": [history_id]
+            }
+            
+            result = self._send_request("POST", url, params=params, json=data)
+            
+            if not result or result.get("ret") != "0":
+                logger.debug(f"[Jimeng] 获取排队信息失败: {result}")
+                return None
+            
+            return result.get("data", {})
+            
+        except Exception as e:
+            logger.error(f"[Jimeng] 获取排队信息异常: {e}")
+            return None
+    
     def _poll_video_result_by_history(self, history_id: str, max_wait_time: int = 600, 
                                        check_interval: int = 10) -> Dict:
         """
@@ -1655,9 +1749,64 @@ class JimengAPIClient:
         print(f"\n[3/3] 开始轮询视频生成状态...")
         print(f"  - history_id: {history_id}")
         print(f"  - 最大等待时间: {max_wait_time}秒")
-        print(f"  - 检查间隔: {check_interval}秒")
         logger.info(f"[Jimeng] 开始轮询视频生成，history_id: {history_id}")
         
+        # ========== 阶段1：排队等待阶段 ==========
+        print(f"\n[阶段1] 检查排队状态...")
+        queue_check_count = 0
+        max_queue_checks = max_wait_time // 30  # 最多检查次数（30秒一次）
+        
+        while queue_check_count < max_queue_checks:
+            queue_check_count += 1
+            
+            # 调用排队接口
+            queue_data = self._get_history_queue_info(history_id)
+            
+            if queue_data and history_id in queue_data:
+                task_info = queue_data[history_id]
+                queue_info = task_info.get('queue_info', {})
+                forecast = task_info.get('forecast_cost_time', {})
+                
+                queue_idx = queue_info.get('queue_idx', 0)
+                queue_length = queue_info.get('queue_length', 0)
+                queue_status = queue_info.get('queue_status', 0)
+                polling_config = queue_info.get('polling_config', {})
+                poll_interval = polling_config.get('interval_seconds', 30)
+                
+                queue_cost = forecast.get('forecast_queue_cost', 0)
+                generate_cost = forecast.get('forecast_generate_cost', 0)
+                
+                # queue_status: 0=不在队列, 1=在队列
+                if queue_status == 1 and queue_idx > 0:
+                    # 还在排队
+                    print(f"\n[排队 #{queue_check_count}] 排队中...")
+                    print(f"  - 当前位置: {queue_idx}/{queue_length}")
+                    print(f"  - 预计排队时间: {queue_cost // 60} 分钟")
+                    print(f"  - 预计生成时间: {generate_cost // 60} 分钟")
+                    logger.info(f"[Jimeng] 排队中，位置: {queue_idx}/{queue_length}, 预计排队: {queue_cost//60}分钟")
+                    
+                    # 根据API建议的间隔时间等待
+                    time.sleep(poll_interval)
+                    continue
+                else:
+                    # 不在排队了，开始生成
+                    print(f"\n[SUCCESS] 开始生成视频！")
+                    logger.info(f"[Jimeng] 排队结束，开始生成视频")
+                    break
+            else:
+                # 获取排队信息失败，可能已经开始生成了
+                print(f"\n[阶段1] 无法获取排队信息，可能已开始生成")
+                break
+        else:
+            # 超过最大检查次数
+            logger.error(f"[Jimeng] 排队等待超时，已等待 {queue_check_count * 30}秒")
+            return {
+                "success": False,
+                "error": f"排队等待超时"
+            }
+        
+        # ========== 阶段2：生成轮询阶段 ==========
+        print(f"\n[阶段2] 轮询视频生成进度...")
         max_retries = max_wait_time // check_interval
         
         for attempt in range(max_retries):
