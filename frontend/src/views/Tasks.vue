@@ -27,76 +27,163 @@
       </el-table>
     </el-card>
 
-    <!-- 创建任务对话框 -->
+    <!-- 创建图片任务对话框 -->
     <el-dialog
-      v-model="dialogVisible"
-      :title="dialogType === 'image' ? '新建图片任务' : '新建视频任务'"
-      width="600px"
+      v-model="imageDialogVisible"
+      title="新建图片任务"
+      width="800px"
+      :close-on-click-modal="false"
     >
-      <el-form :model="taskForm" label-width="100px">
+      <el-form :model="imageForm" label-width="100px">
         <el-form-item label="任务名称">
-          <el-input v-model="taskForm.name" placeholder="请输入任务名称" />
+          <el-input v-model="imageForm.name" placeholder="请输入任务名称" />
         </el-form-item>
         
-        <el-form-item label="提示词">
-          <el-input
-            v-model="taskForm.prompt"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入图片描述"
-          />
-        </el-form-item>
-
         <el-form-item label="选择模型">
-          <el-select v-model="taskForm.model" placeholder="请选择模型" style="width: 100%">
-            <el-option
-              v-for="model in modelList"
-              :key="model.value"
-              :label="model.label"
-              :value="model.value"
-            />
+          <el-select v-model="imageForm.model" placeholder="请选择模型" style="width: 100%">
+            <el-option-group label="Seedream系列">
+              <el-option label="图片5.0 Lite - 指令响应更精准" value="jimeng_5_0_lite" />
+              <el-option label="图片4.6 - 人像一致性更好" value="jimeng_4_6" />
+            </el-option-group>
+            <el-option-group label="经典系列">
+              <el-option label="图片4.5 - 强化一致性" value="jimeng_4_5" />
+              <el-option label="图片4.1 - 专业创意美学" value="jimeng_4_1" />
+              <el-option label="图片4.0 - 支持多参考图" value="jimeng_4_0" />
+              <el-option label="图片3.1 - 美学多样性" value="jimeng_3_1" />
+              <el-option label="图片3.0 - 影视级质感" value="jimeng_3_0" />
+            </el-option-group>
           </el-select>
         </el-form-item>
 
         <el-form-item label="图片比例">
-          <el-select v-model="taskForm.ratio" placeholder="请选择比例" style="width: 100%">
-            <el-option label="1:1" value="1:1" />
-            <el-option label="16:9" value="16:9" />
-            <el-option label="9:16" value="9:16" />
-            <el-option label="4:3" value="4:3" />
-            <el-option label="3:4" value="3:4" />
+          <el-radio-group v-model="imageForm.ratio" class="ratio-group">
+            <el-radio-button label="智能">智能</el-radio-button>
+            <el-radio-button label="21:9">21:9</el-radio-button>
+            <el-radio-button label="16:9">16:9</el-radio-button>
+            <el-radio-button label="3:2">3:2</el-radio-button>
+            <el-radio-button label="4:3">4:3</el-radio-button>
+            <el-radio-button label="1:1">1:1</el-radio-button>
+            <el-radio-button label="3:4">3:4</el-radio-button>
+            <el-radio-button label="2:3">2:3</el-radio-button>
+            <el-radio-button label="9:16">9:16</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="分辨率">
+          <el-radio-group v-model="imageForm.resolution">
+            <el-radio-button label="2K">高清 2K</el-radio-button>
+            <el-radio-button label="4K">超清 4K</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="上传图片">
+          <el-upload
+            ref="uploadRef"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :on-success="handleUploadSuccess"
+            :on-remove="handleRemoveFile"
+            :file-list="imageForm.uploadedFiles"
+            multiple
+            :limit="10"
+            list-type="picture-card"
+            accept="image/*"
+          >
+            <el-icon><Plus /></el-icon>
+          </el-upload>
+          <div class="upload-tip">支持jpg/png格式，最多10张</div>
+        </el-form-item>
+
+        <el-form-item label="提示词">
+          <el-input
+            v-model="imageForm.prompt"
+            type="textarea"
+            :rows="5"
+            placeholder="请输入图片描述，输入 @ 可引用已上传的图片"
+            @input="handlePromptInput"
+          />
+          <div v-if="imageForm.uploadedFiles.length > 0" class="image-tags">
+            <span class="tag-label">已上传图片：</span>
+            <el-tag
+              v-for="(file, index) in imageForm.uploadedFiles"
+              :key="file.uid"
+              closable
+              @close="handleRemoveTag(index)"
+              style="margin: 4px;"
+            >
+              @{{ file.name }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="定时执行">
+          <el-switch v-model="imageForm.enableSchedule" />
+        </el-form-item>
+
+        <el-form-item label="执行时间" v-if="imageForm.enableSchedule">
+          <el-date-picker
+            v-model="imageForm.scheduledTime"
+            type="datetime"
+            placeholder="选择日期时间"
+            :disabled-date="disabledDate"
+            :disabled-hours="disabledHours"
+            :disabled-minutes="disabledMinutes"
+            :disabled-seconds="disabledSeconds"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="imageDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateImageTask" :loading="creating">
+          创建任务
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 创建视频任务对话框 -->
+    <el-dialog
+      v-model="videoDialogVisible"
+      title="新建视频任务"
+      width="600px"
+    >
+      <el-form :model="videoForm" label-width="100px">
+        <el-form-item label="任务名称">
+          <el-input v-model="videoForm.name" placeholder="请输入任务名称" />
+        </el-form-item>
+        
+        <el-form-item label="提示词">
+          <el-input
+            v-model="videoForm.prompt"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入视频描述"
+          />
+        </el-form-item>
+
+        <el-form-item label="选择模型">
+          <el-select v-model="videoForm.model" placeholder="请选择模型" style="width: 100%">
+            <el-option label="即梦视频2.0" value="jimeng_video_v2" />
+            <el-option label="即梦视频1.5" value="jimeng_video_v1_5" />
+            <el-option label="高清视频生成" value="hd_video_gen" />
           </el-select>
         </el-form-item>
 
-        <el-form-item label="参考图片" v-if="dialogType === 'image'">
-          <el-select
-            v-model="taskForm.image_urls"
-            multiple
-            placeholder="选择参考图片（可选）"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="img in materialList"
-              :key="img.id"
-              :label="img.name"
-              :value="img.file_url"
-            >
-              <div style="display: flex; align-items: center;">
-                <el-image
-                  :src="img.file_url"
-                  style="width: 40px; height: 40px; margin-right: 8px;"
-                  fit="cover"
-                />
-                <span>{{ img.name }}</span>
-              </div>
-            </el-option>
+        <el-form-item label="视频比例">
+          <el-select v-model="videoForm.ratio" placeholder="请选择比例" style="width: 100%">
+            <el-option label="16:9" value="16:9" />
+            <el-option label="9:16" value="9:16" />
+            <el-option label="1:1" value="1:1" />
           </el-select>
         </el-form-item>
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateTask" :loading="creating">
+        <el-button @click="videoDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleCreateVideoTask" :loading="creating">
           创建任务
         </el-button>
       </template>
@@ -107,40 +194,81 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getTasks, deleteTask, runTask, createTask } from '@/api/task'
-import { getMaterials } from '@/api/material'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const creating = ref(false)
 const taskList = ref([])
-const materialList = ref([])
-const dialogVisible = ref(false)
-const dialogType = ref('image')
 
-// 图片模型列表
-const imageModels = [
-  { label: '即梦4.0', value: 'jimeng_v4' },
-  { label: '即梦3.0', value: 'jimeng_v3' },
-  { label: '高美学质量v5', value: 'high_aes_general_v5_0_pro' },
-  { label: '专业渲染v2', value: 'professional_render_v2' },
-]
+// 图片任务相关
+const imageDialogVisible = ref(false)
+const uploadUrl = 'http://localhost:8000/api/materials/upload'
+const uploadHeaders = {
+  Authorization: `Bearer ${localStorage.getItem('token')}`
+}
 
-// 视频模型列表
-const videoModels = [
-  { label: '即梦视频2.0', value: 'jimeng_video_v2' },
-  { label: '即梦视频1.5', value: 'jimeng_video_v1_5' },
-  { label: '高清视频生成', value: 'hd_video_gen' },
-]
+const imageForm = ref({
+  name: '',
+  model: '',
+  ratio: '1:1',
+  resolution: '2K',
+  prompt: '',
+  uploadedFiles: [],
+  enableSchedule: false,
+  scheduledTime: ''
+})
 
-const modelList = ref([])
-
-const taskForm = ref({
+// 视频任务相关
+const videoDialogVisible = ref(false)
+const videoForm = ref({
   name: '',
   prompt: '',
   model: '',
-  ratio: '1:1',
-  image_urls: []
+  ratio: '16:9'
 })
+
+// 时间限制函数
+const now = new Date()
+const disabledDate = (time) => {
+  return time.getTime() < Date.now() - 8.64e7 // 8.64e7 = 1天的毫秒数，允许今天
+}
+
+const disabledHours = () => {
+  const selectedDate = imageForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  
+  if (selectedDate === today) {
+    const currentHour = new Date().getHours()
+    return Array.from({ length: 24 }, (_, i) => i).filter(h => h < currentHour)
+  }
+  return []
+}
+
+const disabledMinutes = (selectedHour) => {
+  const selectedDate = imageForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  const currentHour = new Date().getHours()
+  
+  if (selectedDate === today && selectedHour === currentHour) {
+    const currentMinute = new Date().getMinutes()
+    return Array.from({ length: 60 }, (_, i) => i).filter(m => m < currentMinute)
+  }
+  return []
+}
+
+const disabledSeconds = (selectedHour, selectedMinute) => {
+  const selectedDate = imageForm.value.scheduledTime?.split(' ')[0]
+  const today = new Date().toISOString().split('T')[0]
+  const currentHour = new Date().getHours()
+  const currentMinute = new Date().getMinutes()
+  
+  if (selectedDate === today && selectedHour === currentHour && selectedMinute === currentMinute) {
+    const currentSecond = new Date().getSeconds()
+    return Array.from({ length: 60 }, (_, i) => i).filter(s => s < currentSecond)
+  }
+  return []
+}
 
 const fetchTasks = async () => {
   loading.value = true
@@ -152,30 +280,89 @@ const fetchTasks = async () => {
   }
 }
 
-const fetchMaterials = async () => {
-  try {
-    const res = await getMaterials({ page: 1, page_size: 100 })
-    materialList.value = (res.items || []).filter(m => m.type === 'image')
-  } catch (error) {
-    console.error('获取素材列表失败:', error)
-  }
-}
-
 const showCreateDialog = (type) => {
-  dialogType.value = type
-  modelList.value = type === 'image' ? imageModels : videoModels
-  taskForm.value = {
-    name: '',
-    prompt: '',
-    model: '',
-    ratio: type === 'image' ? '1:1' : '16:9',
-    image_urls: []
+  if (type === 'image') {
+    imageForm.value = {
+      name: '',
+      model: '',
+      ratio: '1:1',
+      resolution: '2K',
+      prompt: '',
+      uploadedFiles: [],
+      enableSchedule: false,
+      scheduledTime: ''
+    }
+    imageDialogVisible.value = true
+  } else {
+    videoForm.value = {
+      name: '',
+      prompt: '',
+      model: '',
+      ratio: '16:9'
+    }
+    videoDialogVisible.value = true
   }
-  dialogVisible.value = true
 }
 
-const handleCreateTask = async () => {
-  if (!taskForm.value.name || !taskForm.value.prompt || !taskForm.value.model) {
+const handleUploadSuccess = (response, file) => {
+  ElMessage.success('上传成功')
+  // 添加已上传的文件标记
+  imageForm.value.uploadedFiles.push({
+    uid: file.uid,
+    name: file.name,
+    url: response.file_url
+  })
+}
+
+const handleRemoveFile = (file) => {
+  const index = imageForm.value.uploadedFiles.findIndex(f => f.uid === file.uid)
+  if (index > -1) {
+    imageForm.value.uploadedFiles.splice(index, 1)
+  }
+}
+
+const handleRemoveTag = (index) => {
+  imageForm.value.uploadedFiles.splice(index, 1)
+}
+
+const handlePromptInput = (value) => {
+  // 可以在这里实现@自动补全逻辑
+}
+
+const handleCreateImageTask = async () => {
+  if (!imageForm.value.name || !imageForm.value.model || !imageForm.value.prompt) {
+    ElMessage.warning('请填写完整信息')
+    return
+  }
+
+  creating.value = true
+  try {
+    // 提取提示词中@引用的图片URL
+    const imageUrls = imageForm.value.uploadedFiles.map(f => f.url)
+    
+    await createTask({
+      name: imageForm.value.name,
+      type: 'image',
+      prompt: imageForm.value.prompt,
+      model: imageForm.value.model,
+      ratio: imageForm.value.ratio,
+      resolution: imageForm.value.resolution,
+      image_urls: imageUrls,
+      scheduled_time: imageForm.value.enableSchedule ? imageForm.value.scheduledTime : null
+    })
+    
+    ElMessage.success('任务创建成功')
+    imageDialogVisible.value = false
+    fetchTasks()
+  } catch (error) {
+    console.error('创建任务失败:', error)
+  } finally {
+    creating.value = false
+  }
+}
+
+const handleCreateVideoTask = async () => {
+  if (!videoForm.value.name || !videoForm.value.prompt || !videoForm.value.model) {
     ElMessage.warning('请填写完整信息')
     return
   }
@@ -183,11 +370,11 @@ const handleCreateTask = async () => {
   creating.value = true
   try {
     await createTask({
-      ...taskForm.value,
-      type: dialogType.value
+      ...videoForm.value,
+      type: 'video'
     })
     ElMessage.success('任务创建成功')
-    dialogVisible.value = false
+    videoDialogVisible.value = false
     fetchTasks()
   } catch (error) {
     console.error('创建任务失败:', error)
@@ -209,10 +396,7 @@ const handleDelete = async (id) => {
   fetchTasks()
 }
 
-onMounted(() => {
-  fetchTasks()
-  fetchMaterials()
-})
+onMounted(fetchTasks)
 </script>
 
 <style scoped>
@@ -223,5 +407,31 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.ratio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 8px;
+}
+
+.image-tags {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.tag-label {
+  font-size: 12px;
+  color: #606266;
+  margin-right: 4px;
 }
 </style>
