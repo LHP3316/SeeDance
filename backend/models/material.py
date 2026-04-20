@@ -18,7 +18,7 @@ class Material(Base):
     __tablename__ = "materials"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
+    name = Column(String(200), nullable=False)  # 真实文件名（UUID格式）
     type = Column(Enum(MaterialTypeEnum), nullable=False)
     file_url = Column(String(500), nullable=False)
     file_path = Column(String(500), nullable=False)

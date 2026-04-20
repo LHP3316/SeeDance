@@ -73,7 +73,7 @@ async def upload_material(
     
     # 创建素材记录
     material = Material(
-        name=file.filename,
+        name=unique_filename,  # 使用真实文件名（从file_path中提取）
         type=MaterialTypeEnum.image if type == "image" else MaterialTypeEnum.video,
         file_url=f"/uploads/materials/{unique_filename}",
         file_path=str(file_path),

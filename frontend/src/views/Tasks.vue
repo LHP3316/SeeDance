@@ -345,10 +345,10 @@ const showCreateDialog = (type) => {
 
 const handleUploadSuccess = (response, file) => {
   ElMessage.success('上传成功')
-  // 添加已上传的文件标记
+  // 添加已上传的文件标记，使用真实文件名
   imageForm.value.uploadedFiles.push({
     uid: file.uid,
-    name: file.name,
+    name: response.name,  // 使用真实文件名（UUID格式）
     url: response.file_url
   })
 }
