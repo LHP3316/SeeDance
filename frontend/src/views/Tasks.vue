@@ -88,6 +88,7 @@
             :limit="5"
             list-type="picture-card"
             accept="image/*"
+            :class="{ 'hide-upload': imageForm.uploadedFiles.length >= 5 }"
           >
             <el-icon><Plus /></el-icon>
           </el-upload>
@@ -552,6 +553,11 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 8px;
+}
+
+/* 隐藏上传按钮 */
+.hide-upload :deep(.el-upload--picture-card) {
+  display: none !important;
 }
 
 .time-tip {
