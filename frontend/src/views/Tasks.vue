@@ -41,16 +41,18 @@
         
         <el-form-item label="选择模型" prop="model">
           <el-select v-model="imageForm.model" placeholder="请选择模型" style="width: 100%">
-            <el-option-group label="Seedream系列">
-              <el-option label="图片5.0 Lite - 指令响应更精准" value="jimeng_5_0_lite" />
-              <el-option label="图片4.6 - 人像一致性更好" value="jimeng_4_6" />
+            <el-option-group label="最新版本">
+              <el-option label="图片5.0 - 最新最强模型" value="5.0" />
+              <el-option label="图片4.6" value="4.6" />
+              <el-option label="图片4.5" value="4.5" />
             </el-option-group>
-            <el-option-group label="经典系列">
-              <el-option label="图片4.5 - 强化一致性" value="jimeng_4_5" />
-              <el-option label="图片4.1 - 专业创意美学" value="jimeng_4_1" />
-              <el-option label="图片4.0 - 支持多参考图" value="jimeng_4_0" />
-              <el-option label="图片3.1 - 美学多样性" value="jimeng_3_1" />
-              <el-option label="图片3.0 - 影视级质感" value="jimeng_3_0" />
+            <el-option-group label="经典版本">
+              <el-option label="图片4.1 - 专业创意美学" value="4.1" />
+              <el-option label="图片4.0 - 支持多参考图" value="4.0" />
+              <el-option label="图片3.1 - 美学多样性" value="3.1" />
+              <el-option label="图片3.0 - 影视级质感" value="3.0" />
+              <el-option label="图片2.1" value="2.1" />
+              <el-option label="图片2.0" value="2.0" />
             </el-option-group>
           </el-select>
         </el-form-item>
