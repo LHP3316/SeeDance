@@ -194,10 +194,8 @@
         <el-form-item label="选择模型" prop="model">
           <el-select v-model="videoForm.model" placeholder="请选择模型" style="width: 100%">
             <el-option-group label="Seedance 2.0系列">
-              <el-option label="Seedance 2.0 Fast VIP - 极速推理，会员专属通道" value="s2.0" />
-              <el-option label="Seedance 2.0 VIP - 全模态能力，会员专属通道" value="s2.0p" />
-              <el-option label="Seedance 2.0 Fast - 高性价比" value="s2.0_fast" />
-              <el-option label="Seedance 2.0 - 全能王者" value="s2.0_standard" />
+              <el-option label="Seedance 2.0 - 高性价比" value="s2.0" />
+              <el-option label="Seedance 2.0 Pro - 全模态能力" value="s2.0p" />
             </el-option-group>
           </el-select>
         </el-form-item>
