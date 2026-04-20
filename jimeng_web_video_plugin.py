@@ -402,6 +402,210 @@ class JimengWebVideoPlugin:
             logger.error(f"上传图片失败: {e}")
             raise
     
+    def _select_model(self, model_name: str):
+        """
+        选择模型（即梦使用的是自定义下拉选择器）
+        
+        Args:
+            model_name: 模型名称，如 "Seedance 2.0 VIP"
+        """
+        try:
+            # 1. 找到并点击模型选择器
+            # 根据HTML代码，模型选择器是第二个 combobox，显示 "Seedance 2.0"
+            # 查找所有 lv-select-view-value，找到包含 "Seedance" 的那个
+            all_selectors = self.page.query_selector_all('span.lv-select-view-value')
+            model_selector = None
+            
+            for selector in all_selectors:
+                text = selector.inner_text()
+                if 'Seedance' in text or 'seedance' in text.lower():
+                    model_selector = selector
+                    break
+            
+            if not model_selector:
+                logger.warning(f"未找到模型选择器，跳过模型选择")
+                return
+            
+            logger.info(f"点击模型选择器...")
+            model_selector.click()
+            time.sleep(1.5)  # 等待弹出列表
+            
+            # 2. 在弹出的 listbox 中查找并点击目标模型
+            # 模型选项是 div，包含模型名称文本
+            model_option = self.page.query_selector(f'div[role="listbox"] >> div:has-text("{model_name}")')
+            
+            if not model_option:
+                logger.warning(f"未找到模型选项: {model_name}")
+                # 按 ESC 关闭下拉框
+                self.page.keyboard.press('Escape')
+                time.sleep(0.5)
+                return
+            
+            # 3. 点击目标模型
+            logger.info(f"选择模型: {model_name}")
+            model_option.click()
+            time.sleep(1)
+            
+            logger.info(f"模型选择完成: {model_name}")
+            
+        except Exception as e:
+            logger.error(f"选择模型失败: {e}")
+            # 尝试关闭下拉框
+            try:
+                self.page.keyboard.press('Escape')
+                time.sleep(0.5)
+            except:
+                pass
+    
+    def _select_ratio(self, ratio: str):
+        """
+        选择比例（radio 单选按钮组）
+        
+        Args:
+            ratio: 比例，如 "4:3"
+        """
+        try:
+            # 1. 点击比例按钮（底部工具栏显示比例的 button）
+            # 模糊匹配包含 toolbar-button 的 button
+            all_buttons = self.page.query_selector_all('button[class*="toolbar-button"]')
+            logger.info(f"找到 {len(all_buttons)} 个 toolbar-button 按钮")
+            
+            ratio_button = None
+            for idx, btn in enumerate(all_buttons):
+                text = btn.inner_text()
+                logger.info(f"按钮 {idx}: 文本='{text}'")
+                
+                # 查找包含冒号（比例格式）且包含目标比例的按钮
+                if ':' in text:
+                    logger.info(f"找到比例按钮，文本: {text}")
+                    # 如果是第一次找到的比例按钮，直接使用（当前显示的比例）
+                    if not ratio_button:
+                        ratio_button = btn
+                    
+                    # 如果文本完全匹配目标比例，优先选择
+                    if text.strip() == ratio:
+                        ratio_button = btn
+                        logger.info(f"精确匹配到比例按钮: {ratio}")
+                        break
+            
+            if not ratio_button:
+                logger.warning(f"未找到比例按钮: {ratio}")
+                return
+            
+            logger.info(f"点击比例按钮...")
+            ratio_button.click()
+            time.sleep(1)  # 等待弹出比例选择面板
+            
+            # 2. 在弹出的面板中查找并点击目标比例
+            # 比例选项是 label.lv-radio，包含 input[type="radio"][value="比例"]
+            # 查找包含指定 value 的 radio input 的父 label
+            ratio_label = self.page.query_selector(f'label.lv-radio:has(input[type="radio"][value="{ratio}"])')
+            
+            if not ratio_label:
+                logger.warning(f"未找到比例选项: {ratio}")
+                # 按 ESC 关闭面板
+                self.page.keyboard.press('Escape')
+                time.sleep(0.5)
+                return
+            
+            # 3. 点击 label（会自动选中 radio）
+            logger.info(f"选择比例: {ratio}")
+            ratio_label.click()
+            time.sleep(0.5)
+            
+            # 4. 按 ESC 关闭面板
+            self.page.keyboard.press('Escape')
+            time.sleep(0.3)
+            
+            logger.info(f"比例选择完成: {ratio}")
+            
+        except Exception as e:
+            logger.error(f"选择比例失败: {e}")
+            try:
+                self.page.keyboard.press('Escape')
+                time.sleep(0.5)
+            except:
+                pass
+    
+    def _select_duration(self, duration: int):
+        """
+        选择时长（垂直下拉列表）
+        
+        Args:
+            duration: 时长（秒），如 5
+        """
+        try:
+            # 1. 点击时长按钮（底部工具栏显示时长的 span）
+            # 查找所有 lv-select-view-value，找到包含秒数的
+            all_spans = self.page.query_selector_all('span.lv-select-view-value')
+            duration_span = None
+            current_duration = None
+            
+            for span in all_spans:
+                text = span.inner_text()
+                if 's' in text and any(c.isdigit() for c in text):
+                    duration_span = span
+                    # 提取当前时长数字
+                    import re
+                    match = re.search(r'(\d+)s', text)
+                    if match:
+                        current_duration = int(match.group(1))
+                    break
+            
+            if not duration_span:
+                logger.warning(f"未找到时长按钮")
+                return
+            
+            logger.info(f"当前时长: {current_duration}s，目标时长: {duration}s")
+            
+            # 如果已经是目标时长，不需要选择
+            if current_duration == duration:
+                logger.info(f"当前时长已经是 {duration}s，无需选择")
+                return
+            
+            logger.info(f"点击时长按钮...")
+            duration_span.click()
+            time.sleep(1.5)  # 等待弹出时长选择列表完全展开
+            
+            # 2. 在列表中查找目标时长
+            # 时长选项垂直排列：4s, 5s, 6s, 7s, 8s, 9s, 10s...
+            # 需要根据当前时长和目标时长计算移动次数
+            # 当前在 current_duration 的位置，要移动到 duration 的位置
+            # 4s=索引0, 5s=索引1, 6s=索引2, 以此类推
+            
+            # 从当前项移动到目标项的步数
+            steps = duration - current_duration
+            
+            logger.info(f"需要按 {abs(steps)} 次{'下' if steps > 0 else '上'}箭头选择 {duration}s")
+            
+            if steps > 0:
+                # 向下移动
+                for i in range(steps):
+                    self.page.keyboard.press('ArrowDown')
+                    time.sleep(0.5)
+                    logger.debug(f"按下箭头 {i+1}/{steps}")
+            elif steps < 0:
+                # 向上移动
+                for i in range(abs(steps)):
+                    self.page.keyboard.press('ArrowUp')
+                    time.sleep(0.5)
+                    logger.debug(f"按上箭头 {i+1}/{abs(steps)}")
+            
+            # 3. 按回车确认选择
+            logger.info(f"按回车确认选择...")
+            self.page.keyboard.press('Enter')
+            time.sleep(0.5)
+            
+            logger.info(f"时长选择完成: {duration}s")
+            
+        except Exception as e:
+            logger.error(f"选择时长失败: {e}")
+            try:
+                self.page.keyboard.press('Escape')
+                time.sleep(0.5)
+            except:
+                pass
+    
     def _set_generation_params(
         self,
         prompt: str,
@@ -458,18 +662,18 @@ class JimengWebVideoPlugin:
                 self.page.keyboard.type('@')
                 time.sleep(2)  # 等待选择器弹出
                 
-                # TODO: 选择第 idx+1 张图片
-                # 需要根据实际网页结构调整选择器
-                # 即梦的选择器应该会有图片列表，选择对应的图片
+                # 选择第 idx+1 张图片
+                # 即梦的图片选择器会显示已上传的图片列表（图片1、图片2...）
+                # 使用键盘方向键选择对应的图片
+                logger.info(f"选择第 {idx+1} 张图片...")
                 
-                # 暂时使用键盘方向键选择（需要根据实际情况调整）
+                # 第1张图片不需要移动，第2张按1次下箭头，第3张按2次，以此类推
                 if idx > 0:
-                    # 按右箭头键移动到下一个图片
                     for _ in range(idx):
-                        self.page.keyboard.press('ArrowRight')
+                        self.page.keyboard.press('ArrowDown')
                         time.sleep(0.3)
                 
-                # 按回车选择图片
+                # 按回车确认选择
                 self.page.keyboard.press('Enter')
                 time.sleep(1)
                 
@@ -490,23 +694,17 @@ class JimengWebVideoPlugin:
             
             logger.info("提示词输入完成")
             
-            # 2. 选择模型
-            model_select = self.page.query_selector('select:has(option[value*="seedance"])')
-            if model_select:
-                model_select.select_option(value=model)
-                logger.info(f"已选择模型: {model}")
+            # 2. 选择模型（即梦使用的是自定义下拉选择器）
+            logger.info(f"选择模型: {model}")
+            self._select_model(model)
             
-            # 3. 选择比例
-            ratio_select = self.page.query_selector(f'select:has(option[value="{ratio}"])')
-            if ratio_select:
-                ratio_select.select_option(value=ratio)
-                logger.info(f"已选择比例: {ratio}")
+            # 3. 选择比例（4:3）
+            logger.info(f"选择比例: {ratio}")
+            self._select_ratio(ratio)
             
-            # 4. 选择时长
-            duration_select = self.page.query_selector('select:has(option[value*="duration"])')
-            if duration_select:
-                duration_select.select_option(value=str(duration))
-                logger.info(f"已选择时长: {duration}秒")
+            # 4. 选择时长（5s）
+            logger.info(f"选择时长: {duration}s")
+            self._select_duration(duration)
             
             time.sleep(1)
             
@@ -534,8 +732,10 @@ class JimengWebVideoPlugin:
             if not generate_button:
                 raise Exception("未找到生成按钮")
             
-            generate_button.click()
-            logger.info("已点击生成按钮，等待视频生成...")
+            # TODO: 暂时注释掉点击按钮，等待用户手动调整
+            # generate_button.click()
+            # logger.info("已点击生成按钮，等待视频生成...")
+            logger.info("[已注释] 点击生成按钮（等待手动调整）")
             
             # 2. 等待视频生成完成
             # 方法1：监听网络请求获取视频URL
