@@ -186,7 +186,7 @@ task2_动画视频_20240416_103045.mp4
 - `task_id` - 任务ID
 - `status` - 执行状态（success/failed）
 - `started_at` - 开始时间
-- `finished_at` - 结束时间
+- `completed_at` - 完成时间
 - `duration_seconds` - 耗时（秒）
 - `history_id` - API返回的history_id
 - `error_message` - 错误信息
@@ -209,13 +209,12 @@ task2_动画视频_20240416_103045.mp4
   - 比例: 16:9
   - 提示词: 一幅美丽的风景画，有山有水...
 使用文生图模式
-API调用成功，生成 4 张图片
+[测试模式] 模拟API调用，不实际请求即梦API  # 测试模式会显示此标记
+[测试模式] 模拟API调用成功，生成 2 张图片
+API调用成功，生成 2 张图片
 正在下载图片: https://...
-图片保存成功: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_0.png
-  ✓ 图片已保存: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_0.png
-正在下载图片: https://...
-图片保存成功: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_1.png
-  ✓ 图片已保存: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_1.png
+图片保存成功: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_0_TEST.png  # 测试模式带_TEST标记
+  ✓ 图片已保存: D:\Project\seedance\output\task1_风景图片生成_20240416_103015_0_TEST.png
 任务 [ID:1] 状态已更新为: completed
 ✓ 任务 [ID:1] 执行成功
 执行日志已保存 [Task:1, Execution:5]
@@ -223,7 +222,7 @@ API调用成功，生成 4 张图片
 任务执行完成 [ID:1]
   - 状态: 成功
   - 耗时: 45.23秒
-  - 保存文件: ['D:\\Project\\seedance\\output\\task1_风景图片生成_20240416_103015_0.png', 'D:\\Project\\seedance\\output\\task1_风景图片生成_20240416_103015_1.png']
+  - 保存文件: ['D:\\Project\\seedance\\output\\task1_风景图片生成_20240416_103015_0_TEST.png', 'D:\\Project\\seedance\\output\\task1_风景图片生成_20240416_103015_1_TEST.png']
 ------------------------------------------------------------
 ```
 

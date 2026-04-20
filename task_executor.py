@@ -484,7 +484,7 @@ class TaskExecutor:
                 task_id=task.id,
                 status="success" if result["success"] else "failed",
                 started_at=start_time,
-                finished_at=end_time,
+                completed_at=end_time,  # 使用completed_at而不是finished_at
                 duration_seconds=duration,
                 history_id=result.get("history_id"),
                 error_message=result.get("error")

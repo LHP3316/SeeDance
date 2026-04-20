@@ -18,7 +18,7 @@ class TaskExecution(Base):
     task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
     status = Column(Enum(ExecutionStatusEnum), default=ExecutionStatusEnum.running)
     started_at = Column(DateTime, server_default=func.now())
-    finished_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)  # 使用数据库中已有的字段名
     duration_seconds = Column(Integer, nullable=True)
     history_id = Column(String(100), nullable=True)
     error_message = Column(Text, nullable=True)
