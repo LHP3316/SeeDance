@@ -141,15 +141,14 @@
           
           <div v-if="imageForm.uploadedFiles.length > 0" class="image-tags">
             <span class="tag-label">已上传图片：</span>
-            <el-tag
+            <span
               v-for="(file, index) in imageForm.uploadedFiles"
               :key="file.uid"
-              closable
-              @close="handleRemoveTag(index)"
-              style="margin: 4px;"
+              class="image-tag-text"
             >
               @{{ file.name }}
-            </el-tag>
+              <el-icon class="remove-icon" @click="handleRemoveTag(index)"><Close /></el-icon>
+            </span>
           </div>
         </el-form-item>
 
@@ -400,15 +399,15 @@ const insertImageTag = (index) => {
   const file = imageForm.value.uploadedFiles[index]
   if (!file) return
   
-  // 在@位置插入图片标签
+  // 在@位置插入图片名称
   const prompt = imageForm.value.prompt
   const atPos = prompt.lastIndexOf('@')
   
   if (atPos !== -1) {
-    // 替换@为图片标签
+    // 替换@为@图片名
     const before = prompt.substring(0, atPos)
     const after = prompt.substring(atPos + 1)
-    imageForm.value.prompt = `${before}[@${file.name}]${after}`
+    imageForm.value.prompt = `${before}@${file.name}${after}`
   }
   
   // 隐藏选择器
@@ -559,6 +558,36 @@ onMounted(() => {
   font-size: 12px;
   color: #606266;
   margin-right: 4px;
+}
+
+.image-tag-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: #f0f9ff;
+  border: 1px solid #b3d8ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #409eff;
+  cursor: default;
+  transition: all 0.2s;
+}
+
+.image-tag-text:hover {
+  background: #e6f7ff;
+  border-color: #66b1ff;
+}
+
+.remove-icon {
+  margin-left: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #909399;
+  transition: color 0.2s;
+}
+
+.remove-icon:hover {
+  color: #f56c6c;
 }
 
 /* 提示词容器 */
