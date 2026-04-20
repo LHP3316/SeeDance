@@ -154,21 +154,19 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="执行时间">
+        <el-form-item label="执行时间" prop="scheduledTime">
           <el-date-picker
             v-model="imageForm.scheduledTime"
             type="datetime"
-            placeholder="选择日期时间（可选）"
+            placeholder="选择日期时间"
             :disabled-date="disabledDate"
             :disabled-hours="disabledHours"
             :disabled-minutes="disabledMinutes"
             :disabled-seconds="disabledSeconds"
             format="YYYY-MM-DD HH:mm:ss"
             value-format="YYYY-MM-DD HH:mm:ss"
-            clearable
             style="width: 100%"
           />
-          <div class="time-tip">不选择则立即执行</div>
         </el-form-item>
       </el-form>
 
@@ -251,7 +249,8 @@ const imageRules = {
   model: [{ required: true, message: '请选择模型', trigger: 'change' }],
   ratio: [{ required: true, message: '请选择图片比例', trigger: 'change' }],
   resolution: [{ required: true, message: '请选择分辨率', trigger: 'change' }],
-  prompt: [{ required: true, message: '请输入提示词', trigger: 'blur' }]
+  prompt: [{ required: true, message: '请输入提示词', trigger: 'blur' }],
+  scheduledTime: [{ required: true, message: '请选择执行时间', trigger: 'change' }]
 }
 
 const imageForm = ref({
