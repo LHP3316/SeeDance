@@ -18,9 +18,9 @@
         <el-table-column prop="status" label="状态" width="100" />
         <el-table-column prop="model" label="模型" width="150" />
         <el-table-column prop="created_at" label="创建时间" width="180" />
-        <el-table-column label="操作" width="150">
+        <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button size="small" @click="handleRun(row.id)">执行</el-button>
+            <!-- <el-button size="small" @click="handleRun(row.id)">执行</el-button> -->
             <el-button type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
