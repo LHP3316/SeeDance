@@ -108,6 +108,7 @@ async def create_task(
                 task_image = TaskImage(
                     task_id=task.id,
                     image_id=material.id,
+                    image_url=img_url,  # 保存图片URL
                     reference_name=material.name,
                     sort_order=idx
                 )
