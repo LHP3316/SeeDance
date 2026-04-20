@@ -95,7 +95,7 @@
         </el-form-item>
 
         <el-form-item label="提示词">
-          <div class="prompt-container">
+          <div class="prompt-container" @click.stop>
             <el-input
               v-model="imageForm.prompt"
               type="textarea"
@@ -110,8 +110,12 @@
               v-if="showImagePicker" 
               class="image-picker-dropdown"
               :style="pickerStyle"
+              @click.stop
             >
-              <div class="picker-header">选择图片</div>
+              <div class="picker-header">
+                <span>选择图片</span>
+                <el-icon class="close-btn" @click="closeImagePicker"><Close /></el-icon>
+              </div>
               <div class="picker-list">
                 <div 
                   v-for="(file, index) in imageForm.uploadedFiles" 
@@ -126,7 +130,10 @@
                   />
                   <span class="picker-name">{{ file.name }}</span>
                 </div>
-                <el-empty v-if="imageForm.uploadedFiles.length === 0" description="暂无图片" :image-size="60" />
+                <div v-if="imageForm.uploadedFiles.length === 0" class="empty-tip">
+                  <el-icon :size="40"><Picture /></el-icon>
+                  <p>暂无图片，请先上传</p>
+                </div>
               </div>
             </div>
           </div>
@@ -224,7 +231,7 @@
 import { ref, onMounted } from 'vue'
 import { getTasks, deleteTask, runTask, createTask } from '@/api/task'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Close, Picture } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const creating = ref(false)
@@ -418,6 +425,20 @@ const insertImageTag = (index) => {
   }, 100)
 }
 
+const closeImagePicker = () => {
+  showImagePicker.value = false
+  // 移除末尾的@
+  if (imageForm.value.prompt && imageForm.value.prompt.endsWith('@')) {
+    imageForm.value.prompt = imageForm.value.prompt.slice(0, -1)
+  }
+  // 聚焦回输入框
+  setTimeout(() => {
+    if (promptInputRef.value) {
+      promptInputRef.value.focus()
+    }
+  }, 100)
+}
+
 const handleCreateImageTask = async () => {
   if (!imageForm.value.name || !imageForm.value.model || !imageForm.value.prompt) {
     ElMessage.warning('请填写完整信息')
@@ -485,7 +506,20 @@ const handleDelete = async (id) => {
   fetchTasks()
 }
 
-onMounted(fetchTasks)
+onMounted(() => {
+  fetchTasks()
+  
+  // 添加全局点击事件，点击外部关闭下拉框
+  document.addEventListener('click', () => {
+    if (showImagePicker.value) {
+      showImagePicker.value = false
+      // 移除末尾的@
+      if (imageForm.value.prompt && imageForm.value.prompt.endsWith('@')) {
+        imageForm.value.prompt = imageForm.value.prompt.slice(0, -1)
+      }
+    }
+  })
+})
 </script>
 
 <style scoped>
@@ -550,6 +584,20 @@ onMounted(fetchTasks)
   font-size: 13px;
   font-weight: 500;
   color: #303133;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-btn {
+  cursor: pointer;
+  font-size: 16px;
+  color: #909399;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #f56c6c;
 }
 
 .picker-list {
@@ -605,5 +653,25 @@ onMounted(fetchTasks)
 
 .picker-list::-webkit-scrollbar-thumb:hover {
   background: #909399;
+}
+
+/* 空状态提示 */
+.empty-tip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #909399;
+}
+
+.empty-tip .el-icon {
+  margin-bottom: 12px;
+}
+
+.empty-tip p {
+  margin: 0;
+  font-size: 14px;
+  color: #909399;
 }
 </style>
