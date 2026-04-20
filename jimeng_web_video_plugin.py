@@ -380,11 +380,11 @@ class JimengWebVideoPlugin:
             file_input.set_input_files(image_paths)
             
             logger.info(f"已上传 {len(image_paths)} 张图片")
-            time.sleep(3)  # 等待上传完成
+            time.sleep(5)  # 等待上传完成
             
             # 等待图片上传完成后，查找页面上的图片元素
             # 即梦会显示上传的图片缩略图
-            self.page.wait_for_timeout(2000)
+            self.page.wait_for_timeout(5000)
             
             # 尝试获取上传的图片元素（根据实际网页结构调整选择器）
             # 通常会有图片预览区域
@@ -411,41 +411,62 @@ class JimengWebVideoPlugin:
         """
         try:
             # 1. 找到并点击模型选择器
-            # 根据HTML代码，模型选择器是第二个 combobox，显示 "Seedance 2.0"
+            # 根据 HTML 代码，模型选择器是第二个 combobox，显示 "Seedance 2.0"
             # 查找所有 lv-select-view-value，找到包含 "Seedance" 的那个
             all_selectors = self.page.query_selector_all('span.lv-select-view-value')
             model_selector = None
-            
+            current_model = None
+                        
             for selector in all_selectors:
                 text = selector.inner_text()
                 if 'Seedance' in text or 'seedance' in text.lower():
                     model_selector = selector
+                    current_model = text.strip()
+                    logger.info(f"当前模型: {current_model}")
                     break
-            
+                        
             if not model_selector:
                 logger.warning(f"未找到模型选择器，跳过模型选择")
                 return
-            
+                        
+            # 2. 如果当前模型已经是目标模型，不需要选择
+            if current_model == model_name:
+                logger.info(f"当前模型已经是 {model_name}，无需选择")
+                return
+                        
             logger.info(f"点击模型选择器...")
             model_selector.click()
-            time.sleep(1.5)  # 等待弹出列表
-            
-            # 2. 在弹出的 listbox 中查找并点击目标模型
-            # 模型选项是 div，包含模型名称文本
-            model_option = self.page.query_selector(f'div[role="listbox"] >> div:has-text("{model_name}")')
-            
+            time.sleep(5)  # 等待弹出列表
+                        
+            # 3. 在弹出的 listbox 中查找并点击目标模型
+            # 模型选项是 li[role="option"]，内部包含 div.option-label-Fv9c0E 显示模型名称
+            # 先尝试精确匹配
+            model_option = self.page.query_selector(f'li[role="option"] >> div.option-label-Fv9c0E:has-text("{model_name}")')
+                        
+            # 如果没找到，尝试宽松匹配（只匹配 li 中的文本）
+            if not model_option:
+                all_options = self.page.query_selector_all('li[role="option"]')
+                for option in all_options:
+                    text = option.inner_text()
+                    if model_name in text:
+                        model_option = option
+                        logger.info(f"找到模型选项: {text}")
+                        break
+                        
             if not model_option:
                 logger.warning(f"未找到模型选项: {model_name}")
+                # 截图调试
+                self.page.screenshot(path="debug_model_options.png")
                 # 按 ESC 关闭下拉框
                 self.page.keyboard.press('Escape')
-                time.sleep(0.5)
+                time.sleep(2)
                 return
-            
-            # 3. 点击目标模型
+                        
+            # 4. 点击目标模型
             logger.info(f"选择模型: {model_name}")
             model_option.click()
-            time.sleep(1)
-            
+            time.sleep(5)
+                        
             logger.info(f"模型选择完成: {model_name}")
             
         except Exception as e:
@@ -465,20 +486,28 @@ class JimengWebVideoPlugin:
             ratio: 比例，如 "4:3"
         """
         try:
-            # 1. 点击比例按钮（底部工具栏显示比例的 button）
+            # 1. 检查当前比例（底部工具栏显示比例的 button）
             # 模糊匹配包含 toolbar-button 的 button
             all_buttons = self.page.query_selector_all('button[class*="toolbar-button"]')
             logger.info(f"找到 {len(all_buttons)} 个 toolbar-button 按钮")
             
+            current_ratio = None
             ratio_button = None
+            
             for idx, btn in enumerate(all_buttons):
                 text = btn.inner_text()
                 logger.info(f"按钮 {idx}: 文本='{text}'")
                 
-                # 查找包含冒号（比例格式）且包含目标比例的按钮
+                # 查找包含冒号（比例格式）的按钮
                 if ':' in text:
                     logger.info(f"找到比例按钮，文本: {text}")
-                    # 如果是第一次找到的比例按钮，直接使用（当前显示的比例）
+                    # 提取比例文本
+                    import re
+                    match = re.search(r'(\d+:\d+)', text)
+                    if match:
+                        current_ratio = match.group(1)
+                    
+                    # 如果是第一次找到的比例按钮，记录下来
                     if not ratio_button:
                         ratio_button = btn
                     
@@ -488,13 +517,20 @@ class JimengWebVideoPlugin:
                         logger.info(f"精确匹配到比例按钮: {ratio}")
                         break
             
+            logger.info(f"当前比例: {current_ratio}，目标比例: {ratio}")
+            
+            # 如果已经是目标比例，不需要选择
+            if current_ratio == ratio:
+                logger.info(f"当前比例已经是 {ratio}，无需选择")
+                return
+            
             if not ratio_button:
                 logger.warning(f"未找到比例按钮: {ratio}")
                 return
             
             logger.info(f"点击比例按钮...")
             ratio_button.click()
-            time.sleep(1)  # 等待弹出比例选择面板
+            time.sleep(5)  # 等待弹出比例选择面板
             
             # 2. 在弹出的面板中查找并点击目标比例
             # 比例选项是 label.lv-radio，包含 input[type="radio"][value="比例"]
@@ -511,11 +547,11 @@ class JimengWebVideoPlugin:
             # 3. 点击 label（会自动选中 radio）
             logger.info(f"选择比例: {ratio}")
             ratio_label.click()
-            time.sleep(0.5)
+            time.sleep(3)
             
             # 4. 按 ESC 关闭面板
             self.page.keyboard.press('Escape')
-            time.sleep(0.3)
+            time.sleep(2)
             
             logger.info(f"比例选择完成: {ratio}")
             
@@ -565,7 +601,7 @@ class JimengWebVideoPlugin:
             
             logger.info(f"点击时长按钮...")
             duration_span.click()
-            time.sleep(1.5)  # 等待弹出时长选择列表完全展开
+            time.sleep(5)  # 等待弹出时长选择列表完全展开
             
             # 2. 在列表中查找目标时长
             # 时长选项垂直排列：4s, 5s, 6s, 7s, 8s, 9s, 10s...
@@ -582,19 +618,19 @@ class JimengWebVideoPlugin:
                 # 向下移动
                 for i in range(steps):
                     self.page.keyboard.press('ArrowDown')
-                    time.sleep(0.5)
+                    time.sleep(1.5)
                     logger.debug(f"按下箭头 {i+1}/{steps}")
             elif steps < 0:
                 # 向上移动
                 for i in range(abs(steps)):
                     self.page.keyboard.press('ArrowUp')
-                    time.sleep(0.5)
+                    time.sleep(1.5)
                     logger.debug(f"按上箭头 {i+1}/{abs(steps)}")
             
             # 3. 按回车确认选择
             logger.info(f"按回车确认选择...")
             self.page.keyboard.press('Enter')
-            time.sleep(0.5)
+            time.sleep(3)
             
             logger.info(f"时长选择完成: {duration}s")
             
@@ -635,7 +671,7 @@ class JimengWebVideoPlugin:
             
             # 2. 点击提示词框，聚焦
             prompt_input.click()
-            time.sleep(1)
+            time.sleep(5)
             
             # 3. 解析提示词
             # 格式：@文件名1是描述1，@文件名2是描述2，其他文本
@@ -671,11 +707,11 @@ class JimengWebVideoPlugin:
                 if idx > 0:
                     for _ in range(idx):
                         self.page.keyboard.press('ArrowDown')
-                        time.sleep(0.3)
+                        time.sleep(1)
                 
                 # 按回车确认选择
                 self.page.keyboard.press('Enter')
-                time.sleep(1)
+                time.sleep(5)
                 
                 # 输入描述
                 self.page.keyboard.type(desc)
@@ -701,12 +737,12 @@ class JimengWebVideoPlugin:
             # 3. 选择比例（4:3）
             logger.info(f"选择比例: {ratio}")
             self._select_ratio(ratio)
+            time.sleep(3)  # 等待比例选择完成
             
             # 4. 选择时长（5s）
             logger.info(f"选择时长: {duration}s")
             self._select_duration(duration)
-            
-            time.sleep(1)
+            time.sleep(3)  # 等待时长选择完成
             
         except Exception as e:
             logger.error(f"设置生成参数失败: {e}")
@@ -723,19 +759,62 @@ class JimengWebVideoPlugin:
             视频 URL 或 None
         """
         try:
-            # 1. 点击生成按钮（根据截图，按钮 class 为 lv-btn lv-btn-primary lv-btn-icon-only）
-            generate_button = self.page.query_selector('button.lv-btn.lv-btn-primary.lv-btn-icon-only')
+            # 1. 查找生成按钮（多种选择器尝试）
+            generate_button = None
+            
+            # 尝试1：根据截图中的 class
+            generate_button = self.page.query_selector('button.submit-button-s4a7XV')
+            if generate_button:
+                logger.info("找到生成按钮（submit-button-s4a7XV）")
+            
+            # 尝试2：查找包含向上箭头图标的按钮
             if not generate_button:
-                # 备用选择器：查找包含“生成”文本的按钮
+                generate_button = self.page.query_selector('button.lv-btn-primary:has(svg)')
+                if generate_button:
+                    logger.info("找到生成按钮（lv-btn-primary:has(svg)）")
+            
+            # 尝试3：查找最后一个 primary 按钮
+            if not generate_button:
+                all_primary = self.page.query_selector_all('button.lv-btn-primary')
+                if all_primary:
+                    generate_button = all_primary[-1]
+                    logger.info(f"找到生成按钮（最后一个 primary 按钮，共 {len(all_primary)} 个）")
+            
+            # 尝试4：备用选择器
+            if not generate_button:
                 generate_button = self.page.query_selector('button:has-text("生成")')
+                if generate_button:
+                    logger.info("找到生成按钮（包含“生成”文本）")
             
             if not generate_button:
+                logger.error("未找到生成按钮")
+                # 截图调试
+                self.page.screenshot(path="debug_no_button.png")
                 raise Exception("未找到生成按钮")
             
-            # TODO: 暂时注释掉点击按钮，等待用户手动调整
-            # generate_button.click()
-            # logger.info("已点击生成按钮，等待视频生成...")
-            logger.info("[已注释] 点击生成按钮（等待手动调整）")
+            # 2. 检查按钮是否可用
+            is_disabled = generate_button.get_attribute('disabled')
+            logger.info(f"按钮禁用状态: {is_disabled}")
+            
+            if is_disabled:
+                logger.warning("按钮处于禁用状态，等待 3 秒后重试...")
+                time.sleep(3)
+            
+            # 3. 点击生成按钮
+            logger.info("点击生成按钮...")
+            
+            # 尝试直接点击
+            try:
+                generate_button.click()
+                logger.info("直接点击成功")
+            except Exception as e:
+                logger.warning(f"直接点击失败: {e}，尝试 JavaScript 点击...")
+                # 使用 JavaScript 点击
+                generate_button.evaluate('button => button.click()')
+                logger.info("JavaScript 点击成功")
+            
+            time.sleep(5)  # 等待点击生效，避免网络延迟
+            logger.info("已点击生成按钮，等待视频生成...")
             
             # 2. 等待视频生成完成
             # 方法1：监听网络请求获取视频URL
@@ -743,31 +822,56 @@ class JimengWebVideoPlugin:
             
             def handle_response(response):
                 nonlocal video_url
-                # 监听视频相关的响应
+                # 监听视频相关的响应（排除加载动画）
                 if '.mp4' in response.url and 'jimeng' in response.url:
-                    video_url = response.url
-                    logger.info(f"检测到视频URL: {video_url}")
+                    if 'loading' not in response.url and 'animation' not in response.url:
+                        video_url = response.url
+                        logger.info(f"检测到视频URL: {video_url}")
             
             self.page.on("response", handle_response)
             
             # 3. 等待生成完成（最多等待 timeout 秒）
             start_time = time.time()
+            last_check_time = 0
+            
             while time.time() - start_time < timeout:
+                # 每 5 秒检查一次，避免频繁查询
+                if time.time() - last_check_time < 5:
+                    time.sleep(1)
+                    continue
+                    
+                last_check_time = time.time()
+                elapsed = int(time.time() - start_time)
+                logger.info(f"等待视频生成中... 已等待 {elapsed} 秒")
+                
                 # 检查是否生成完成
                 try:
-                    # 查找视频播放器或下载按钮
+                    # 查找视频播放器
                     video_element = self.page.query_selector('video')
                     if video_element:
                         src = video_element.get_attribute('src')
-                        if src:
+                        if src and 'loading' not in src and 'animation' not in src:
                             video_url = src
-                            logger.info(f"从video元素获取URL: {video_url}")
+                            logger.info(f"从 video 元素获取URL: {video_url}")
                             break
                     
                     # 查找下载按钮
                     download_button = self.page.query_selector('button:has-text("下载")')
                     if download_button:
                         logger.info("检测到下载按钮，视频已生成完成")
+                        break
+                    
+                    # 查找“再次生成”按钮（生成完成后会出现）
+                    regenerate_button = self.page.query_selector('button:has-text("再次生成")')
+                    if regenerate_button:
+                        logger.info("检测到再次生成按钮，视频已生成完成")
+                        # 尝试从页面中获取视频URL
+                        video_element = self.page.query_selector('video')
+                        if video_element:
+                            src = video_element.get_attribute('src')
+                            if src:
+                                video_url = src
+                                logger.info(f"从 video 元素获取URL: {video_url}")
                         break
                         
                 except:
