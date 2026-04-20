@@ -214,6 +214,7 @@
 
         <el-form-item label="视频时长" prop="duration">
           <el-select v-model="videoForm.duration" placeholder="请选择时长" style="width: 100%">
+            <el-option label="请选择" :value="null" disabled />
             <el-option label="4秒" :value="4" />
             <el-option label="5秒" :value="5" />
             <el-option label="6秒" :value="6" />
@@ -381,7 +382,7 @@ const videoForm = ref({
   prompt: '',
   model: '',
   ratio: '16:9',
-  duration: 4,
+  duration: null,
   scheduledTime: '',
   uploadedFiles: []
 })
@@ -519,7 +520,7 @@ const showCreateDialog = (type) => {
       prompt: '',
       model: '',
       ratio: '16:9',
-      duration: 4,
+      duration: null,
       scheduledTime: '',
       uploadedFiles: []
     }
@@ -673,8 +674,13 @@ const handleCreateVideoTask = async () => {
   creating.value = true
   try {
     await createTask({
-      ...videoForm.value,
+      name: videoForm.value.name,
       type: 'video',
+      prompt: videoForm.value.prompt,
+      model: videoForm.value.model,
+      ratio: videoForm.value.ratio,
+      duration: videoForm.value.duration,
+      scheduled_time: videoForm.value.scheduledTime,
       image_urls: videoForm.value.uploadedFiles.map(f => f.url)
     })
     ElMessage.success('任务创建成功')
