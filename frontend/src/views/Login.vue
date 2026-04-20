@@ -1,16 +1,16 @@
 <template>
   <div class="login-container">
     <el-card class="login-card">
-      <h2>SeeDance åå°ç®¡ç†</h2>
+      <h2>SeeDance ºóÌ¨¹ÜÀí</h2>
       <el-form :model="loginForm" @submit.prevent="handleLogin">
         <el-form-item>
-          <el-input v-model="loginForm.username" placeholder="ç”¨æˆ·å" prefix-icon="User" />
+          <el-input v-model="loginForm.username" placeholder="ÓÃ»§Ãû" prefix-icon="User" />
         </el-form-item>
         <el-form-item>
-          <el-input v-model="loginForm.password" type="password" placeholder="å¯†ç " prefix-icon="Lock" show-password />
+          <el-input v-model="loginForm.password" type="password" placeholder="ÃÜÂë" prefix-icon="Lock" show-password />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" native-type="submit" :loading="loading" style="width: 100%">ç™»å½•</el-button>
+          <el-button type="primary" native-type="submit" :loading="loading" style="width: 100%">µÇÂ¼</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -39,10 +39,10 @@ const handleLogin = async () => {
     const res = await login(loginForm)
     userStore.setToken(res.access_token)
     userStore.setUserInfo(res.user)
-    ElMessage.success('ç™»å½•æˆåŠŸ')
-    router.push('/dashboard')
+    ElMessage.success('µÇÂ¼³É¹¦')
+    router.push('/')
   } catch (error) {
-    console.error('ç™»å½•å¤±è´¥:', error)
+    console.error('µÇÂ¼Ê§°Ü:', error)
   } finally {
     loading.value = false
   }
@@ -57,10 +57,12 @@ const handleLogin = async () => {
   height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
+
 .login-card {
   width: 400px;
   padding: 20px;
 }
+
 h2 {
   text-align: center;
   margin-bottom: 30px;
