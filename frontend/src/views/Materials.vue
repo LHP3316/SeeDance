@@ -68,6 +68,19 @@
 
         <el-empty v-if="!loading && materialList.length === 0" description="暂无素材，请先上传" />
       </div>
+
+      <!-- 分页 -->
+      <div class="pagination-container" v-if="total > 0">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[12, 24, 36, 48]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
 
     <el-dialog
@@ -113,6 +126,11 @@ const uploadUrl = 'http://localhost:8000/api/materials/upload'
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
 }
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(12)
+const total = ref(0)
 
 const previewVisible = ref(false)
 const previewUrl = ref('')
@@ -161,15 +179,28 @@ const formatDate = (dateStr) => {
 const fetchMaterials = async () => {
   loading.value = true
   try {
-    const res = await getMaterials({ page: 1, page_size: 50 })
+    const res = await getMaterials({ page: currentPage.value, page_size: pageSize.value })
     materialList.value = res.items || []
+    total.value = res.total || 0
   } finally {
     loading.value = false
   }
 }
 
+const handleSizeChange = (val) => {
+  pageSize.value = val
+  currentPage.value = 1 // 改变每页数量时重置到第一页
+  fetchMaterials()
+}
+
+const handleCurrentChange = (val) => {
+  currentPage.value = val
+  fetchMaterials()
+}
+
 const handleUploadSuccess = () => {
   ElMessage.success('上传成功')
+  currentPage.value = 1 // 上传后回到第一页
   fetchMaterials()
 }
 
@@ -313,6 +344,14 @@ onMounted(fetchMaterials)
 
 .preview-info {
   margin-top: 20px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 @media (max-width: 768px) {
