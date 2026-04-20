@@ -22,6 +22,7 @@ class TaskExecution(Base):
     duration_seconds = Column(Integer, nullable=True)
     history_id = Column(String(100), nullable=True)
     error_message = Column(Text, nullable=True)
+    output_files = Column(Text, nullable=True)  # 生成的文件路径列表（JSON格式）
     created_at = Column(DateTime, server_default=func.now())
 
     task = relationship("Task", back_populates="executions")

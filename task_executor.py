@@ -268,11 +268,120 @@ class TaskExecutor:
         
         try:
             # 判断是文生图还是图生图
+            # 先检查task.image_material_id（单图）
+            has_reference_images = False
+            reference_images = []
+            
             if task.image_material_id:
+                # 方式1：通过image_material_id（单图）
+                has_reference_images = True
+                reference_images = [task.image_material_id]
+                logger.info(f"检测到参考图片 (image_material_id): {task.image_material_id}")
+            else:
+                # 方式2：查询task_images表（多图）
+                session = self.Session()
+                try:
+                    from sqlalchemy import text
+                    query_result = session.execute(
+                        text("SELECT image_id FROM task_images WHERE task_id = :task_id ORDER BY sort_order"),
+                        {"task_id": task.id}
+                    )
+                    rows = query_result.fetchall()
+                    if rows:
+                        has_reference_images = True
+                        reference_images = [row[0] for row in rows]
+                        logger.info(f"检测到参考图片 (task_images表): {len(reference_images)} 张")
+                finally:
+                    session.close()
+            
+            if has_reference_images:
                 # 图生图
-                logger.info("检测到参考图片，使用图生图模式")
-                # TODO: 实现图生图逻辑
-                result["error"] = "图生图功能待实现"
+                logger.info("使用图生图模式")
+                
+                # 1. 从数据库获取图片素材信息
+                session = self.Session()
+                try:
+                    from sqlalchemy import text
+                    query_result = session.execute(
+                        text("SELECT image_id FROM task_images WHERE task_id = :task_id ORDER BY sort_order"),
+                        {"task_id": task.id}
+                    )
+                    rows = query_result.fetchall()
+                    image_ids = [row[0] for row in rows]
+                finally:
+                    session.close()
+                
+                logger.info(f"获取到 {len(image_ids)} 个图片素材ID: {image_ids}")
+                
+                # 2. 查询素材详情并下载图片
+                local_image_paths = []
+                for image_id in image_ids:
+                    session = self.Session()
+                    try:
+                        query_result = session.execute(
+                            text("SELECT id, name, file_url FROM materials WHERE id = :id"),
+                            {"id": image_id}
+                        )
+                        row = query_result.fetchone()
+                        if row:
+                            material_name = row[1]
+                            file_url = row[2]
+                            
+                            logger.info(f"下载图片素材: {material_name} ({file_url})")
+                            
+                            # 下载图片到临时目录
+                            local_path = self._download_material_image(file_url, material_name)
+                            if local_path:
+                                local_image_paths.append(local_path)
+                                logger.info(f"  ✓ 图片已下载: {local_path}")
+                            else:
+                                logger.error(f"  ✗ 图片下载失败: {material_name}")
+                        else:
+                            logger.error(f"  ✗ 未找到素材ID: {image_id}")
+                    finally:
+                        session.close()
+                
+                if not local_image_paths:
+                    result["error"] = "所有图片素材下载失败"
+                    logger.error(result["error"])
+                else:
+                    logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
+                    
+                    # 3. 调用即梦图生图API
+                    api_result = self.jimeng_client.generate_image_to_image(
+                        image_paths=local_image_paths,
+                        prompt=task.prompt,
+                        model=task.model,
+                        ratio=task.ratio
+                    )
+                    
+                    result["api_response"] = api_result
+                    
+                    if api_result.get("success"):
+                        result["success"] = True
+                        result["history_id"] = api_result.get("history_id")
+                        result["image_urls"] = api_result.get("urls", [])
+                        
+                        logger.info(f"API调用成功，生成 {len(result['image_urls'])} 张图片")
+                        logger.info(f"  - 图片URL列表:")
+                        for idx, img_url in enumerate(result['image_urls'], 1):
+                            logger.info(f"    [{idx}] {img_url}")
+                        
+                        # 下载并保存图片
+                        for idx, img_url in enumerate(result["image_urls"]):
+                            saved_path = self._download_and_save_image(
+                                url=img_url,
+                                task_id=task.id,
+                                task_name=task.name,
+                                index=idx
+                            )
+                            if saved_path:
+                                result["saved_files"].append(saved_path)
+                                logger.info(f"  ✓ 图片已保存: {saved_path}")
+                    else:
+                        result["error"] = api_result.get("error", "API调用失败")
+                        logger.error(f"API调用失败: {result['error']}")
+                        logger.error(f"  - 完整API响应: {json.dumps(api_result, ensure_ascii=False, indent=2)}")
             else:
                 # 文生图
                 logger.info("使用文生图模式")
@@ -429,6 +538,51 @@ class TaskExecutor:
             logger.error(f"下载图片失败: {e}")
             return None
     
+    def _download_material_image(self, file_url: str, material_name: str) -> Optional[str]:
+        """
+        下载素材图片到临时目录
+        
+        Args:
+            file_url: 素材文件URL（相对路径，如 /uploads/materials/xxx.png）
+            material_name: 素材名称
+            
+        Returns:
+            保存的文件路径
+        """
+        import requests
+        
+        try:
+            # 如果是相对路径，补全为完整URL
+            if file_url.startswith('/'):
+                # 从 backend/.env 或配置文件读取后端地址
+                backend_url = "http://localhost:8000"
+                full_url = f"{backend_url}{file_url}"
+            else:
+                full_url = file_url
+            
+            logger.info(f"正在下载素材图片: {full_url}")
+            response = requests.get(full_url, timeout=120)
+            response.raise_for_status()
+            
+            # 保存到临时目录
+            temp_dir = self.output_dir / "temp_materials"
+            temp_dir.mkdir(exist_ok=True)
+            
+            # 使用素材名称作为文件名
+            safe_name = "".join(c for c in material_name if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+            filepath = temp_dir / safe_name
+            
+            # 保存文件
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+            
+            logger.info(f"素材图片下载成功: {filepath}")
+            return str(filepath)
+            
+        except Exception as e:
+            logger.error(f"下载素材图片失败: {e}")
+            return None
+    
     def _download_and_save_video(self, url: str, task_id: int, task_name: str) -> Optional[str]:
         """
         下载并保存视频
@@ -510,6 +664,15 @@ class TaskExecutor:
         try:
             duration = int((end_time - start_time).total_seconds())
             
+            # 获取生成的文件列表
+            output_files = result.get('saved_files', []) or result.get('saved_file', '')
+            if isinstance(output_files, list):
+                output_files_json = json.dumps(output_files, ensure_ascii=False)
+            elif output_files:
+                output_files_json = json.dumps([output_files], ensure_ascii=False)
+            else:
+                output_files_json = None
+            
             execution = TaskExecution(
                 task_id=task.id,
                 status="success" if result["success"] else "failed",
@@ -517,7 +680,8 @@ class TaskExecutor:
                 completed_at=end_time,  # 使用completed_at而不是finished_at
                 duration_seconds=duration,
                 history_id=result.get("history_id"),
-                error_message=result.get("error")
+                error_message=result.get("error"),
+                output_files=output_files_json  # 保存生成的文件路径JSON
             )
             
             session.add(execution)
