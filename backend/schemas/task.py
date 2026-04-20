@@ -21,6 +21,7 @@ class TaskCreate(BaseModel):
     image_size: Optional[str] = None
     schedule_type: str = "manual"
     cron_expression: Optional[str] = None
+    scheduled_time: Optional[datetime] = None  # 定时执行时间
     images: List[TaskImageRef] = []
     # 支持直接传图片URL数组（用于快速创建）
     image_urls: Optional[List[str]] = []

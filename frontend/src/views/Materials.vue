@@ -14,16 +14,14 @@
           </el-upload>
         </div>
       </template>
-      
-      <!-- 矩阵卡片布局 -->
+
       <div class="materials-grid" v-loading="loading">
-        <div 
-          v-for="item in materialList" 
-          :key="item.id" 
+        <div
+          v-for="item in materialList"
+          :key="item.id"
           class="material-card"
           @click="previewMaterial(item)"
         >
-          <!-- 图片预览 -->
           <div class="card-image">
             <el-image
               v-if="item.type === 'image'"
@@ -48,8 +46,7 @@
               <el-icon :size="50"><VideoPlay /></el-icon>
               <span>视频文件</span>
             </div>
-            
-            <!-- 悬停遮罩 -->
+
             <div class="card-overlay">
               <el-button type="primary" size="small" @click.stop="previewMaterial(item)">
                 <el-icon><ZoomIn /></el-icon>
@@ -57,10 +54,9 @@
               </el-button>
             </div>
           </div>
-          
-          <!-- 卡片信息 -->
+
           <div class="card-info">
-            <div class="card-name" :title="item.name">{{ item.name }}</div>
+            <div class="card-name" :title="getDisplayName(item)">{{ getDisplayName(item) }}</div>
             <div class="card-meta">
               <el-tag :type="item.type === 'image' ? 'success' : 'primary'" size="small">
                 {{ item.type === 'image' ? '图片' : '视频' }}
@@ -69,16 +65,14 @@
             </div>
           </div>
         </div>
-        
-        <!-- 空状态 -->
-        <el-empty v-if="!loading && materialList.length === 0" description="暂无素材，请上传" />
+
+        <el-empty v-if="!loading && materialList.length === 0" description="暂无素材，请先上传" />
       </div>
     </el-card>
 
-    <!-- 图片预览对话框 -->
     <el-dialog
       v-model="previewVisible"
-      :title="currentMaterial?.name || '图片预览'"
+      :title="getDisplayName(currentMaterial) || '素材预览'"
       width="900px"
       :close-on-click-modal="true"
       class="preview-dialog"
@@ -87,19 +81,19 @@
         <el-image
           :src="getImageUrl(previewUrl)"
           fit="contain"
-          style="width: 100%; max-height: 70vh;"
+          style="width: 100%; max-height: 70vh"
           :preview-src-list="[getImageUrl(previewUrl)]"
         />
       </div>
       <div class="preview-info">
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="文件名">{{ currentMaterial?.name }}</el-descriptions-item>
+          <el-descriptions-item label="文件名">{{ getDisplayName(currentMaterial) }}</el-descriptions-item>
           <el-descriptions-item label="类型">
             <el-tag :type="currentMaterial?.type === 'image' ? 'success' : 'primary'">
               {{ currentMaterial?.type === 'image' ? '图片' : '视频' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="上传时间">{{ currentMaterial?.created_at }}</el-descriptions-item>
+          <el-descriptions-item label="上传时间">{{ formatDate(currentMaterial?.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="文件路径">{{ currentMaterial?.file_path }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -120,27 +114,38 @@ const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
 }
 
-// 预览相关
 const previewVisible = ref(false)
 const previewUrl = ref('')
 const currentMaterial = ref(null)
 
-// 获取完整的图片URL
 const getImageUrl = (url) => {
   if (!url) return ''
-  // 如果是相对路径，添加后端地址
-  if (url.startsWith('/uploads/')) {
-    return `http://localhost:8000${url}`
-  }
-  // 如果已经是完整URL，直接返回
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  // 其他情况，添加后端地址
+  if (url.startsWith('/uploads/')) return `http://localhost:8000${url}`
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
   return `http://localhost:8000${url.startsWith('/') ? '' : '/'}${url}`
 }
 
-// 格式化日期
+const extractNameFromPath = (value) => {
+  if (!value) return ''
+  const normalized = String(value).replace(/\\/g, '/')
+  const filename = normalized.split('/').pop() || ''
+  try {
+    return decodeURIComponent(filename)
+  } catch {
+    return filename
+  }
+}
+
+const getDisplayName = (material) => {
+  if (!material) return ''
+  return (
+    extractNameFromPath(material.name) ||
+    extractNameFromPath(material.file_path) ||
+    extractNameFromPath(material.file_url) ||
+    '-'
+  )
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const date = new Date(dateStr)
@@ -158,7 +163,6 @@ const fetchMaterials = async () => {
   try {
     const res = await getMaterials({ page: 1, page_size: 50 })
     materialList.value = res.items || []
-    console.log('素材列表:', materialList.value)
   } finally {
     loading.value = false
   }
@@ -189,7 +193,6 @@ onMounted(fetchMaterials)
   align-items: center;
 }
 
-/* 矩阵布局 */
 .materials-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -198,7 +201,6 @@ onMounted(fetchMaterials)
   min-height: 400px;
 }
 
-/* 卡片样式 */
 .material-card {
   background: #fff;
   border-radius: 8px;
@@ -214,7 +216,6 @@ onMounted(fetchMaterials)
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.15);
 }
 
-/* 图片区域 */
 .card-image {
   position: relative;
   width: 100%;
@@ -233,7 +234,6 @@ onMounted(fetchMaterials)
   transform: scale(1.05);
 }
 
-/* 加载状态 */
 .image-loading,
 .image-error,
 .video-placeholder {
@@ -253,7 +253,6 @@ onMounted(fetchMaterials)
   font-size: 12px;
 }
 
-/* 悬停遮罩 */
 .card-overlay {
   position: absolute;
   top: 0;
@@ -274,7 +273,6 @@ onMounted(fetchMaterials)
   opacity: 1;
 }
 
-/* 卡片信息 */
 .card-info {
   padding: 12px;
 }
@@ -299,7 +297,6 @@ onMounted(fetchMaterials)
   color: #909399;
 }
 
-/* 预览对话框 */
 .preview-dialog :deep(.el-dialog__body) {
   padding: 20px;
 }
@@ -318,13 +315,12 @@ onMounted(fetchMaterials)
   margin-top: 20px;
 }
 
-/* 响应式 */
 @media (max-width: 768px) {
   .materials-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 15px;
   }
-  
+
   .card-image {
     height: 150px;
   }

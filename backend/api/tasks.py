@@ -80,6 +80,7 @@ async def create_task(
         image_size=task_data.image_size,
         schedule_type=task_data.schedule_type,
         cron_expression=task_data.cron_expression,
+        scheduled_time=task_data.scheduled_time,
         created_by=current_user.id
     )
     
