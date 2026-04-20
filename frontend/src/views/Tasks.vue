@@ -152,23 +152,21 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="定时执行">
-          <el-switch v-model="imageForm.enableSchedule" />
-        </el-form-item>
-
-        <el-form-item label="执行时间" v-if="imageForm.enableSchedule">
+        <el-form-item label="执行时间">
           <el-date-picker
             v-model="imageForm.scheduledTime"
             type="datetime"
-            placeholder="选择日期时间"
+            placeholder="选择日期时间（可选）"
             :disabled-date="disabledDate"
             :disabled-hours="disabledHours"
             :disabled-minutes="disabledMinutes"
             :disabled-seconds="disabledSeconds"
             format="YYYY-MM-DD HH:mm:ss"
             value-format="YYYY-MM-DD HH:mm:ss"
+            clearable
             style="width: 100%"
           />
+          <div class="time-tip">不选择则立即执行</div>
         </el-form-item>
       </el-form>
 
@@ -251,7 +249,6 @@ const imageForm = ref({
   resolution: '2K',
   prompt: '',
   uploadedFiles: [],
-  enableSchedule: false,
   scheduledTime: ''
 })
 
@@ -331,7 +328,6 @@ const showCreateDialog = (type) => {
       resolution: '2K',
       prompt: '',
       uploadedFiles: [],
-      enableSchedule: false,
       scheduledTime: ''
     }
     imageDialogVisible.value = true
@@ -458,7 +454,7 @@ const handleCreateImageTask = async () => {
       ratio: imageForm.value.ratio,
       resolution: imageForm.value.resolution,
       image_urls: imageUrls,
-      scheduled_time: imageForm.value.enableSchedule ? imageForm.value.scheduledTime : null
+      scheduled_time: imageForm.value.scheduledTime || null
     })
     
     ElMessage.success('任务创建成功')
@@ -542,6 +538,12 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 8px;
+}
+
+.time-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
 .image-tags {
