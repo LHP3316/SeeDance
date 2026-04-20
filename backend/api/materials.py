@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from database import get_db
 from models.material import Material, MaterialTypeEnum, MaterialSourceEnum
-from schemas.material import MaterialCreate, MaterialResponse
+from schemas.material import MaterialResponse, MaterialListResponse
 from core.deps import get_current_user
 from config import settings
 
@@ -16,7 +16,7 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=MaterialListResponse)
 async def list_materials(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),

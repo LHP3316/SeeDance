@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -22,3 +22,10 @@ class MaterialResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MaterialListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[MaterialResponse]

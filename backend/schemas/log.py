@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class LogResponse(BaseModel):
@@ -18,3 +18,10 @@ class LogCreate(BaseModel):
     level: str
     module: str
     message: str
+
+
+class LogListResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[LogResponse]

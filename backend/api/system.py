@@ -5,8 +5,8 @@ from database import get_db
 from models.system_config import SystemConfig
 from models.user import User
 from models.log import SystemLog
-from schemas.user import UserCreate, UserResponse
-from schemas.log import LogResponse
+from schemas.user import UserCreate, UserResponse, UserListResponse
+from schemas.log import LogResponse, LogListResponse
 from core.security import get_password_hash
 from core.deps import get_current_user, require_admin
 
@@ -46,7 +46,7 @@ async def update_session_id(
     return {"message": "更新成功"}
 
 
-@router.get("/users", response_model=dict)
+@router.get("/users", response_model=UserListResponse)
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -110,7 +110,7 @@ async def delete_user(
     return {"message": "删除成功"}
 
 
-@router.get("/logs", response_model=dict)
+@router.get("/logs", response_model=LogListResponse)
 async def get_system_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
