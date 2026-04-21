@@ -51,8 +51,6 @@
               <el-option label="图片4.0 - 支持多参考图" value="4.0" />
               <el-option label="图片3.1 - 美学多样性" value="3.1" />
               <el-option label="图片3.0 - 影视级质感" value="3.0" />
-              <el-option label="图片2.1" value="2.1" />
-              <el-option label="图片2.0" value="2.0" />
             </el-option-group>
           </el-select>
         </el-form-item>

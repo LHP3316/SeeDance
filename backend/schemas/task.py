@@ -47,7 +47,7 @@ class TaskResponse(BaseModel):
     prompt: str
     model: str
     ratio: str
-    duration: Optional[int] = None
+    duration: Optional[str] = None  # 视频时长（如 "4s", "5s"）
     resolution: Optional[str] = None
     image_size: Optional[str] = None
     params: Optional[str] = None
