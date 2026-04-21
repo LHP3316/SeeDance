@@ -2083,15 +2083,36 @@ class JimengAPIClient:
                         for item in item_list:
                             # 尝试 video 字段
                             video = item.get("video", {})
-                            if video and video.get("video_url"):
-                                video_url = video["video_url"]
-                                break
+                            if video:
+                                # 调试：打印video字段结构
+                                print(f"  [DEBUG] video字段keys: {list(video.keys())}")
+                                
+                                # 尝试 origin_video（原始视频）
+                                if video.get("origin_video"):
+                                    video_url = video["origin_video"]
+                                    print(f"  [DEBUG] 从 video.origin_video 找到URL")
+                                    break
+                                
+                                # 尝试 transcoded_video（转码后的视频）
+                                if video.get("transcoded_video"):
+                                    video_url = video["transcoded_video"]
+                                    print(f"  [DEBUG] 从 video.transcoded_video 找到URL")
+                                    break
+                                
+                                # 尝试 play_addr（常见的视频URL字段）
+                                if video.get("play_addr"):
+                                    play_addr = video["play_addr"]
+                                    if isinstance(play_addr, dict) and play_addr.get("url_list"):
+                                        video_url = play_addr["url_list"][0]
+                                        print(f"  [DEBUG] 从 video.play_addr.url_list 找到URL")
+                                        break
                             
                             # 尝试 common_attr.item_urls（实际返回的数据结构）
                             common_attr = item.get("common_attr", {})
                             item_urls = common_attr.get("item_urls", [])
                             if item_urls and item_urls[0]:
                                 video_url = item_urls[0]
+                                print(f"  [DEBUG] 从 common_attr.item_urls 找到URL")
                                 break
                     
                     if video_url:
