@@ -33,7 +33,7 @@ class Task(Base):
     prompt = Column(Text, nullable=False)
     model = Column(String(50), nullable=False)
     ratio = Column(String(20), nullable=False)
-    duration = Column(Integer, nullable=True)  # 视频时长(秒)
+    duration = Column(String(20), nullable=True)  # 视频时长(如 "4s", "5s")
     resolution = Column(String(20), nullable=True)  # 分辨率 2k/4k
     image_size = Column(String(20), nullable=True)  # 图片尺寸
     params = Column(String(1000), nullable=True)  # 扩展参数JSON

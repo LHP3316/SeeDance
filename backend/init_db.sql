@@ -9,3 +9,6 @@ FLUSH PRIVILEGES;
 -- 为已存在的表添加缺失字段（如果字段已存在会跳过）
 ALTER TABLE materials ADD COLUMN IF NOT EXISTS original_name VARCHAR(200) NULL COMMENT '原始文件名';
 ALTER TABLE task_images ADD COLUMN IF NOT EXISTS reference_name VARCHAR(200) NULL COMMENT '图片引用名称';
+
+-- 修改tasks表的duration字段类型：从Integer改为String，支持存储"4s"、"5s"等格式
+ALTER TABLE tasks MODIFY COLUMN duration VARCHAR(20) NULL COMMENT '视频时长(如 "4s", "5s")';

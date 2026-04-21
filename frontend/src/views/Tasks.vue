@@ -193,38 +193,39 @@
         
         <el-form-item label="选择模型" prop="model">
           <el-select v-model="videoForm.model" placeholder="请选择模型" style="width: 100%">
-            <el-option-group label="Seedance 2.0系列">
-              <el-option label="Seedance 2.0 - 高性价比" value="s2.0" />
-              <el-option label="Seedance 2.0 Pro - 全模态能力" value="s2.0p" />
-            </el-option-group>
+            <el-option label="Seedance 2.0 Fast VIP" value="Seedance 2.0 Fast VIP" />
+            <el-option label="Seedance 2.0 VIP" value="Seedance 2.0 VIP" />
+            <el-option label="Seedance 2.0 Fast" value="Seedance 2.0 Fast" />
+            <el-option label="Seedance 2.0" value="Seedance 2.0" />
           </el-select>
         </el-form-item>
 
         <el-form-item label="视频比例" prop="ratio">
           <el-radio-group v-model="videoForm.ratio" class="ratio-group">
+            <el-radio-button label="21:9">21:9</el-radio-button>
             <el-radio-button label="16:9">16:9</el-radio-button>
-            <el-radio-button label="9:16">9:16</el-radio-button>
-            <el-radio-button label="1:1">1:1</el-radio-button>
             <el-radio-button label="4:3">4:3</el-radio-button>
+            <el-radio-button label="1:1">1:1</el-radio-button>
             <el-radio-button label="3:4">3:4</el-radio-button>
+            <el-radio-button label="9:16">9:16</el-radio-button>
           </el-radio-group>
         </el-form-item>
 
         <el-form-item label="视频时长" prop="duration">
           <el-select v-model="videoForm.duration" placeholder="请选择时长" style="width: 100%">
             <el-option label="请选择" :value="null" disabled />
-            <el-option label="4秒" :value="4" />
-            <el-option label="5秒" :value="5" />
-            <el-option label="6秒" :value="6" />
-            <el-option label="7秒" :value="7" />
-            <el-option label="8秒" :value="8" />
-            <el-option label="9秒" :value="9" />
-            <el-option label="10秒" :value="10" />
-            <el-option label="11秒" :value="11" />
-            <el-option label="12秒" :value="12" />
-            <el-option label="13秒" :value="13" />
-            <el-option label="14秒" :value="14" />
-            <el-option label="15秒" :value="15" />
+            <el-option label="4s" value="4s" />
+            <el-option label="5s" value="5s" />
+            <el-option label="6s" value="6s" />
+            <el-option label="7s" value="7s" />
+            <el-option label="8s" value="8s" />
+            <el-option label="9s" value="9s" />
+            <el-option label="10s" value="10s" />
+            <el-option label="11s" value="11s" />
+            <el-option label="12s" value="12s" />
+            <el-option label="13s" value="13s" />
+            <el-option label="14s" value="14s" />
+            <el-option label="15s" value="15s" />
           </el-select>
         </el-form-item>
 
