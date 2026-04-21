@@ -458,17 +458,9 @@ class TaskExecutor:
         }
         
         try:
-            # 判断使用哪种方式生成视频
-            use_web_plugin = self.web_plugin_enabled or (task.params and 'web_plugin' in task.params)
-            
-            if use_web_plugin:
-                # 使用 Web 插件（浏览器自动化）
-                logger.info("🌐 使用 Web 插件模式（浏览器自动化）")
-                result = self._execute_video_task_web_plugin(task)
-            else:
-                # 使用 API 调用（默认）
-                logger.info("⚡ 使用 API 调用模式")
-                result = self._execute_video_task_api(task)
+            # 强制使用 Web 插件模式（API调用模式已废弃）
+            logger.info("🌐 使用 Web 插件模式（浏览器自动化）- API模式已废弃")
+            result = self._execute_video_task_web_plugin(task)
             
         except Exception as e:
             result["error"] = str(e)
@@ -476,170 +468,192 @@ class TaskExecutor:
         
         return result
     
-    def _execute_video_task_api(self, task) -> Dict:
-        """
-        使用 API 调用执行视频任务（原有逻辑）
-        
-        Args:
-            task: 任务对象
-            
-        Returns:
-            执行结果
-        """
-            # 判断任务类型（文生视频 vs 图生视频）
-            has_reference_images = False
-            reference_images = []
-            
-            # 方式1：检查 image_material_id（单图）
-            if task.image_material_id:
-                has_reference_images = True
-                reference_images = [task.image_material_id]
-                logger.info(f"检测到参考图片 (image_material_id): {task.image_material_id}")
-            else:
-                # 方式2：查询 task_images 表（多图）
-                session = self.Session()
-                try:
-                    from sqlalchemy import text
-                    query_result = session.execute(
-                        text("SELECT image_id FROM task_images WHERE task_id = :task_id ORDER BY sort_order"),
-                        {"task_id": task.id}
-                    )
-                    rows = query_result.fetchall()
-                    if rows:
-                        has_reference_images = True
-                        reference_images = [row[0] for row in rows]
-                        logger.info(f"检测到参考图片 (task_images表): {len(reference_images)} 张")
-                finally:
-                    session.close()
-            
-            if has_reference_images:
-                # 图生视频（多图引用）
-                logger.info("使用图生视频模式（多图引用）")
-                
-                # 1. 从数据库获取图片素材信息
-                session = self.Session()
-                try:
-                    from sqlalchemy import text
-                    query_result = session.execute(
-                        text("""
-                            SELECT ti.image_id, ti.reference_name, m.file_url 
-                            FROM task_images ti 
-                            LEFT JOIN materials m ON ti.image_id = m.id 
-                            WHERE ti.task_id = :task_id 
-                            ORDER BY ti.sort_order
-                        """),
-                        {"task_id": task.id}
-                    )
-                    rows = query_result.fetchall()
-                finally:
-                    session.close()
-                
-                if not rows:
-                    result["error"] = "未找到图片素材"
-                    logger.error(result["error"])
-                else:
-                    logger.info(f"获取到 {len(rows)} 个图片素材")
-                    
-                    # 2. 下载图片到本地
-                    local_image_paths = []
-                    
-                    for row in rows:
-                        image_id = row[0]
-                        reference_name = row[1]  # 图片文件名
-                        file_url = row[2]
-                        
-                        logger.info(f"下载图片素材: {reference_name} ({file_url})")
-                        
-                        # 下载图片
-                        local_path = self._download_material_image(file_url, reference_name)
-                        if local_path:
-                            local_image_paths.append(local_path)
-                            logger.info(f"  ✓ 图片已下载: {local_path}")
-                        else:
-                            logger.error(f"  ✗ 图片下载失败: {reference_name}")
-                    
-                    if len(local_image_paths) != len(rows):
-                        result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
-                        logger.error(result["error"])
-                    else:
-                        logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
-                        
-                        # 3. 调用即梦多图视频API（使用包含 @引用的原始提示词）
-                        # 提示词格式：@filename1.png是描述1，@filename2.png是描述2，其他文本
-                        logger.info(f"使用原始提示词（包含 @引用）: {task.prompt}")
-                        
-                        api_result = self.jimeng_client.generate_multi_image_to_video(
-                            image_paths=local_image_paths,
-                            prompt=task.prompt,  # 直接使用原始提示词，包含 @引用
-                            model=task.model,
-                            ratio=task.ratio,
-                            duration=task.duration or 4
-                        )
-                        
-                        result["api_response"] = api_result
-                        
-                        if api_result.get("success"):
-                            result["success"] = True
-                            result["history_id"] = api_result.get("history_id")
-                            result["video_url"] = api_result.get("url")
-                            
-                            logger.info(f"API调用成功，视频URL: {result['video_url']}")
-                            
-                            # 下载并保存视频
-                            if result["video_url"]:
-                                saved_path = self._download_and_save_video(
-                                    url=result["video_url"],
-                                    task_id=task.id,
-                                    task_name=task.name
-                                )
-                                if saved_path:
-                                    result["saved_file"] = saved_path
-                                    logger.info(f"  ✓ 视频已保存: {saved_path}")
-                        else:
-                            result["error"] = api_result.get("error", "API调用失败")
-                            logger.error(f"API调用失败: {result['error']}")
-                            logger.error(f"  - 完整API响应: {json.dumps(api_result, ensure_ascii=False, indent=2)}")
-            else:
-                # 文生视频
-                logger.info("使用文生视频模式")
-                
-                # 调用即梦API
-                api_result = self.jimeng_client.generate_text_to_video(
-                    prompt=task.prompt,
-                    model=task.model,
-                    ratio=task.ratio,
-                    duration=task.duration or 4
-                )
-                
-                result["api_response"] = api_result
-                
-                if api_result.get("success"):
-                    result["success"] = True
-                    result["history_id"] = api_result.get("history_id")
-                    result["video_url"] = api_result.get("url")
-                    
-                    logger.info(f"API调用成功，视频URL: {result['video_url']}")
-                    
-                    # 下载并保存视频
-                    if result["video_url"]:
-                        saved_path = self._download_and_save_video(
-                            url=result["video_url"],
-                            task_id=task.id,
-                            task_name=task.name
-                        )
-                        if saved_path:
-                            result["saved_file"] = saved_path
-                            logger.info(f"  ✓ 视频已保存: {saved_path}")
-                else:
-                    result["error"] = api_result.get("error", "API调用失败")
-                    logger.error(f"API调用失败: {result['error']}")
-                    logger.error(f"  - 完整API响应: {json.dumps(api_result, ensure_ascii=False, indent=2)}")
-            
-        except Exception as e:
-            result["error"] = str(e)
-            logger.error(f"执行视频任务异常: {e}", exc_info=True)
-        
-        return result
+    # def _execute_video_task_api(self, task) -> Dict:
+    #     """
+    #     使用 API 调用执行视频任务（原有逻辑）- 已废弃
+    #     
+    #     Args:
+    #         task: 任务对象
+    #         
+    #     Returns:
+    #         执行结果
+    #     """
+    #     # 已废弃：不再使用API方式生成视频
+    #     logger.warning("⚠️  API调用模式已废弃，请使用Web插件模式")
+    #     return {
+    #         "success": False,
+    #         "history_id": None,
+    #         "video_url": None,
+    #         "saved_file": None,
+    #         "error": "API调用模式已废弃，请使用Web插件模式",
+    #         "api_response": None
+    #     }
+        #
+        # # 以下是原有API调用逻辑（已注释）
+        # result = {
+        #     "success": False,
+        #     "history_id": None,
+        #     "video_url": None,
+        #     "saved_file": None,
+        #     "error": None,
+        #     "api_response": None
+        # }
+        #
+        # try:
+        #     # 判断任务类型（文生视频 vs 图生视频）
+        #     has_reference_images = False
+        #     reference_images = []
+        #     
+        #     # 方式1：检查 image_material_id（单图）
+        #     if task.image_material_id:
+        #         has_reference_images = True
+        #         reference_images = [task.image_material_id]
+        #         logger.info(f"检测到参考图片 (image_material_id): {task.image_material_id}")
+        #     else:
+        #         # 方式2：查询 task_images 表（多图）
+        #         session = self.Session()
+        #         try:
+        #             from sqlalchemy import text
+        #             query_result = session.execute(
+        #                 text("SELECT image_id FROM task_images WHERE task_id = :task_id ORDER BY sort_order"),
+        #                 {"task_id": task.id}
+        #             )
+        #             rows = query_result.fetchall()
+        #             if rows:
+        #                 has_reference_images = True
+        #                 reference_images = [row[0] for row in rows]
+        #                 logger.info(f"检测到参考图片 (task_images表): {len(reference_images)} 张")
+        #         finally:
+        #             session.close()
+        #     
+        #     if has_reference_images:
+        #         # 图生视频（多图引用）
+        #         logger.info("使用图生视频模式（多图引用）")
+        #         
+        #         # 1. 从数据库获取图片素材信息
+        #         session = self.Session()
+        #         try:
+        #             from sqlalchemy import text
+        #             query_result = session.execute(
+        #                 text("""
+        #                     SELECT ti.image_id, ti.reference_name, m.file_url 
+        #                     FROM task_images ti 
+        #                     LEFT JOIN materials m ON ti.image_id = m.id 
+        #                     WHERE ti.task_id = :task_id 
+        #                     ORDER BY ti.sort_order
+        #                 """),
+        #                 {"task_id": task.id}
+        #             )
+        #             rows = query_result.fetchall()
+        #         finally:
+        #             session.close()
+        #         
+        #         if not rows:
+        #             result["error"] = "未找到图片素材"
+        #             logger.error(result["error"])
+        #         else:
+        #             logger.info(f"获取到 {len(rows)} 个图片素材")
+        #             
+        #             # 2. 下载图片到本地
+        #             local_image_paths = []
+        #             
+        #             for row in rows:
+        #                 image_id = row[0]
+        #                 reference_name = row[1]  # 图片文件名
+        #                 file_url = row[2]
+        #                 
+        #                 logger.info(f"下载图片素材: {reference_name} ({file_url})")
+        #                 
+        #                 # 下载图片
+        #                 local_path = self._download_material_image(file_url, reference_name)
+        #                 if local_path:
+        #                     local_image_paths.append(local_path)
+        #                     logger.info(f"  ✓ 图片已下载: {local_path}")
+        #                 else:
+        #                     logger.error(f"  ✗ 图片下载失败: {reference_name}")
+        #             
+        #             if len(local_image_paths) != len(rows):
+        #                 result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
+        #                 logger.error(result["error"])
+        #             else:
+        #                 logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
+        #                 
+        #                 # 3. 调用即梦多图视频API（使用包含 @引用的原始提示词）
+        #                 # 提示词格式：@filename1.png是描述1，@filename2.png是描述2，其他文本
+        #                 logger.info(f"使用原始提示词（包含 @引用）: {task.prompt}")
+        #                 
+        #                 api_result = self.jimeng_client.generate_multi_image_to_video(
+        #                     image_paths=local_image_paths,
+        #                     prompt=task.prompt,  # 直接使用原始提示词，包含 @引用
+        #                     model=task.model,
+        #                     ratio=task.ratio,
+        #                     duration=task.duration or 4
+        #                 )
+        #                 
+        #                 result["api_response"] = api_result
+        #                 
+        #                 if api_result.get("success"):
+        #                     result["success"] = True
+        #                     result["history_id"] = api_result.get("history_id")
+        #                     result["video_url"] = api_result.get("url")
+        #                     
+        #                     logger.info(f"API调用成功，视频URL: {result['video_url']}")
+        #                     
+        #                     # 下载并保存视频
+        #                     if result["video_url"]:
+        #                         saved_path = self._download_and_save_video(
+        #                             url=result["video_url"],
+        #                             task_id=task.id,
+        #                             task_name=task.name
+        #                         )
+        #                         if saved_path:
+        #                             result["saved_file"] = saved_path
+        #                             logger.info(f"  ✓ 视频已保存: {saved_path}")
+        #                 else:
+        #                     result["error"] = api_result.get("error", "API调用失败")
+        #                     logger.error(f"API调用失败: {result['error']}")
+        #                     logger.error(f"  - 完整API响应: {json.dumps(api_result, ensure_ascii=False, indent=2)}")
+        #     else:
+        #         # 文生视频
+        #         logger.info("使用文生视频模式")
+        #         
+        #         # 调用即梦API
+        #         api_result = self.jimeng_client.generate_text_to_video(
+        #             prompt=task.prompt,
+        #             model=task.model,
+        #             ratio=task.ratio,
+        #             duration=task.duration or 4
+        #         )
+        #         
+        #         result["api_response"] = api_result
+        #         
+        #         if api_result.get("success"):
+        #             result["success"] = True
+        #             result["history_id"] = api_result.get("history_id")
+        #             result["video_url"] = api_result.get("url")
+        #             
+        #             logger.info(f"API调用成功，视频URL: {result['video_url']}")
+        #             
+        #             # 下载并保存视频
+        #             if result["video_url"]:
+        #                 saved_path = self._download_and_save_video(
+        #                     url=result["video_url"],
+        #                     task_id=task.id,
+        #                     task_name=task.name
+        #                 )
+        #                 if saved_path:
+        #                     result["saved_file"] = saved_path
+        #                     logger.info(f"  ✓ 视频已保存: {saved_path}")
+        #         else:
+        #             result["error"] = api_result.get("error", "API调用失败")
+        #             logger.error(f"API调用失败: {result['error']}")
+        #             logger.error(f"  - 完整API响应: {json.dumps(api_result, ensure_ascii=False, indent=2)}")
+        #     
+        # except Exception as e:
+        #     result["error"] = str(e)
+        #     logger.error(f"执行视频任务异常: {e}", exc_info=True)
+        # 
+        # return result
     
     def _execute_video_task_web_plugin(self, task) -> Dict:
         """
