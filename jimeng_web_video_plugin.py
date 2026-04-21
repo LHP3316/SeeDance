@@ -1256,7 +1256,7 @@ class JimengWebVideoPlugin:
             output_dir: 输出目录
             
         Returns:
-            视频本地路径
+            视频本地路径，如果失败返回 None
         """
         try:
             import requests
@@ -1295,13 +1295,18 @@ class JimengWebVideoPlugin:
                 if status == 50:
                     logger.info(f"✅ 任务已完成！耗时: {elapsed} 秒 ({elapsed//60} 分钟)")
                     
-                    # 提取视频 URL
+                    # 提取视频 URL（可能返回字典或字符串）
                     video_url = self._extract_video_url_from_history(task_status)
                     if not video_url:
                         logger.error("❌ 未找到视频 URL")
+                        logger.debug(f"任务状态数据: {json.dumps(task_status, ensure_ascii=False, indent=2)[:1000]}")
                         return None
                     
-                    logger.info(f"视频 URL: {video_url}")
+                    logger.info(f"✓ 提取到视频 URL")
+                    
+                    # 如果是字典，打印清晰度信息
+                    if isinstance(video_url, dict):
+                        logger.info(f"  多清晰度: {list(video_url.keys())}")
                     
                     # 下载视频
                     video_path = self._download_video(video_url, output_dir, history_record_id)
@@ -1321,6 +1326,8 @@ class JimengWebVideoPlugin:
             
         except Exception as e:
             logger.error(f"轮询并下载视频失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _poll_task_status_by_api(self, history_record_id: str) -> Optional[Dict]:
@@ -1384,27 +1391,71 @@ class JimengWebVideoPlugin:
             
             result = response.json()
             
+            # 打印 API 返回结果（调试信息）
+            logger.debug(f"[轮询] API返回: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
+            
             if result.get('ret') != '0':
-                logger.debug(f"API 返回错误: {result}")
+                logger.warning(f"[轮询] API 返回错误: ret={result.get('ret')}, errmsg={result.get('errmsg')}")
                 return None
             
             # 提取任务数据
             history_data = result.get('data', {}).get(history_record_id, {})
             if not history_data:
+                logger.warning(f"[轮询] 未找到 history_id 对应的数据")
+                logger.debug(f"[轮询] data keys: {list(result.get('data', {}).keys())}")
                 return None
+            
+            # 打印任务状态信息
+            status = history_data.get('status')
+            fail_code = history_data.get('fail_code', '')
+            logger.debug(f"[轮询] 任务状态: {status}")
+            if fail_code:
+                logger.debug(f"[轮询] 错误代码: {fail_code}")
+            
+            # 如果任务完成，打印 item_list 信息
+            if status in [30, 50]:
+                item_list = history_data.get('item_list', [])
+                logger.info(f"[轮询] 任务完成，item_list数量: {len(item_list)}")
+                
+                if item_list:
+                    first_item = item_list[0]
+                    logger.debug(f"[轮询] 第一个item的keys: {list(first_item.keys())}")
+                    
+                    # 打印 video 字段信息
+                    if 'video' in first_item:
+                        video = first_item['video']
+                        logger.debug(f"[轮询] video字段keys: {list(video.keys())}")
+                        
+                        # 如果有 origin_video 或 transcoded_video，打印详细信息
+                        if 'origin_video' in video:
+                            origin_video = video['origin_video']
+                            if isinstance(origin_video, dict):
+                                logger.debug(f"[轮询] origin_video清晰度: {list(origin_video.keys())}")
+                        
+                        if 'transcoded_video' in video:
+                            transcoded_video = video['transcoded_video']
+                            if isinstance(transcoded_video, dict):
+                                logger.debug(f"[轮询] transcoded_video清晰度: {list(transcoded_video.keys())}")
+                    
+                    # 打印 common_attr.item_urls
+                    if 'common_attr' in first_item:
+                        item_urls = first_item['common_attr'].get('item_urls', [])
+                        logger.debug(f"[轮询] common_attr.item_urls: {item_urls}")
             
             return history_data
             
         except Exception as e:
-            logger.debug(f"轮询任务状态失败: {e}")
+            logger.warning(f"[轮询] 轮询任务状态失败: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
     
-    def _download_video(self, video_url: str, output_dir: str, history_record_id: str) -> Optional[str]:
+    def _download_video(self, video_url, output_dir: str, history_record_id: str) -> Optional[str]:
         """
         下载视频到本地
         
         Args:
-            video_url: 视频 URL
+            video_url: 视频 URL（可以是字符串或字典）
             output_dir: 输出目录
             history_record_id: 历史记录 ID
             
@@ -1414,6 +1465,27 @@ class JimengWebVideoPlugin:
         try:
             import requests
             
+            # 如果video_url是字典（多清晰度），选择最高清晰度
+            if isinstance(video_url, dict):
+                logger.info(f"检测到多清晰度视频URL，选择最高清晰度")
+                final_url = None
+                selected_quality = None
+                
+                for quality in ['origin', '720p', '480p', '360p']:
+                    if quality in video_url:
+                        video_info = video_url[quality]
+                        if isinstance(video_info, dict) and video_info.get('video_url'):
+                            final_url = video_info['video_url']
+                            selected_quality = quality
+                            logger.info(f"  选择清晰度: {quality}")
+                            break
+                
+                if not final_url:
+                    logger.error("无法从多清晰度字典中提取视频URL")
+                    return None
+                
+                video_url = final_url
+            
             logger.info(f"开始下载视频...")
             
             # 生成文件名
@@ -1421,26 +1493,27 @@ class JimengWebVideoPlugin:
             filename = f"jimeng_video_{history_record_id}_{timestamp}.mp4"
             filepath = os.path.join(output_dir, filename)
             
-            # 下载视频
+            # 流式下载视频
             response = requests.get(video_url, stream=True, timeout=300)
             response.raise_for_status()
             
             total_size = int(response.headers.get('content-length', 0))
-            downloaded = 0
+            downloaded_size = 0
             
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
-                        downloaded += len(chunk)
+                        downloaded_size += len(chunk)
                         
-                        # 显示进度
+                        # 显示进度（每10%显示一次）
                         if total_size > 0:
-                            percent = (downloaded / total_size) * 100
-                            if downloaded % (total_size // 10) < 8192:  # 每 10% 显示一次
-                                logger.info(f"下载进度: {percent:.1f}% ({downloaded}/{total_size})")
+                            progress = (downloaded_size / total_size) * 100
+                            if int(progress) % 10 == 0 and downloaded_size < total_size:
+                                logger.info(f"  下载进度: {progress:.1f}% ({downloaded_size}/{total_size} bytes)")
             
             logger.info(f"✅ 视频下载成功: {filepath}")
+            logger.info(f"  文件大小: {downloaded_size / 1024 / 1024:.2f} MB")
             print(f"\n{'='*60}")
             print(f"🎉 视频已保存: {filepath}")
             print(f"{'='*60}\n")
@@ -1449,6 +1522,8 @@ class JimengWebVideoPlugin:
             
         except Exception as e:
             logger.error(f"下载视频失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _poll_task_status(self, history_record_id: str) -> Optional[Dict]:
@@ -1513,7 +1588,7 @@ class JimengWebVideoPlugin:
             history_data: 任务历史数据
             
         Returns:
-            视频 URL
+            视频 URL（优先返回最高清晰度）
         """
         try:
             # 尝试从多个路径提取视频 URL
@@ -1525,34 +1600,92 @@ class JimengWebVideoPlugin:
                     video_info = resource.get('video_info', {})
                     video_url = video_info.get('video_url')
                     if video_url:
+                        logger.info("✓ 从 resources 提取视频URL")
                         return video_url
             
-            # 2. 从 item_list 提取
+            # 2. 从 item_list 提取（主要来源）
             item_list = history_data.get('item_list', [])
             for item in item_list:
                 video = item.get('video', {})
                 if video:
-                    # 尝试多个字段
-                    video_url = video.get('video_url') or video.get('play_addr', {}).get('url_list', [None])[0]
-                    if video_url:
-                        return video_url
+                    # 尝试 origin_video（原始视频）
+                    if video.get('origin_video'):
+                        origin_video = video['origin_video']
+                        # 如果是字典（多清晰度），选择最高清晰度
+                        if isinstance(origin_video, dict):
+                            for quality in ['origin', '720p', '480p', '360p']:
+                                if quality in origin_video:
+                                    video_url = origin_video[quality].get('video_url')
+                                    if video_url:
+                                        logger.info(f"✓ 从 video.origin_video[{quality}] 提取视频URL")
+                                        return video_url
+                        else:
+                            # 如果是字符串，直接返回
+                            logger.info("✓ 从 video.origin_video 提取视频URL")
+                            return origin_video
+                    
+                    # 尝试 transcoded_video（转码后的视频）
+                    if video.get('transcoded_video'):
+                        transcoded_video = video['transcoded_video']
+                        # 如果是字典（多清晰度），选择最高清晰度
+                        if isinstance(transcoded_video, dict):
+                            for quality in ['origin', '720p', '480p', '360p']:
+                                if quality in transcoded_video:
+                                    video_url = transcoded_video[quality].get('video_url')
+                                    if video_url:
+                                        logger.info(f"✓ 从 video.transcoded_video[{quality}] 提取视频URL")
+                                        return video_url
+                        else:
+                            # 如果是字符串，直接返回
+                            logger.info("✓ 从 video.transcoded_video 提取视频URL")
+                            return transcoded_video
+                    
+                    # 尝试 play_addr（常见的视频URL字段）
+                    if video.get('play_addr'):
+                        play_addr = video['play_addr']
+                        if isinstance(play_addr, dict) and play_addr.get('url_list'):
+                            video_url = play_addr['url_list'][0]
+                            if video_url:
+                                logger.info("✓ 从 video.play_addr.url_list 提取视频URL")
+                                return video_url
+                    
+                    # 尝试 video_url 字段
+                    if video.get('video_url'):
+                        video_url = video['video_url']
+                        if video_url:
+                            logger.info("✓ 从 video.video_url 提取视频URL")
+                            return video_url
             
-            # 3. 从 aigo_data 提取
+            # 3. 从 common_attr.item_urls 提取
+            item_list = history_data.get('item_list', [])
+            for item in item_list:
+                common_attr = item.get('common_attr', {})
+                item_urls = common_attr.get('item_urls', [])
+                if item_urls and item_urls[0]:
+                    logger.info("✓ 从 common_attr.item_urls 提取视频URL")
+                    return item_urls[0]
+            
+            # 4. 从 aigo_data 提取
             aigo_data = history_data.get('aigo_data', {})
             if aigo_data:
                 video_url = aigo_data.get('video_url')
                 if video_url:
+                    logger.info("✓ 从 aigo_data.video_url 提取视频URL")
                     return video_url
             
             logger.warning("未从历史数据中找到视频 URL")
+            logger.debug(f"history_data keys: {list(history_data.keys())}")
+            if history_data.get('item_list'):
+                first_item = history_data['item_list'][0]
+                logger.debug(f"第一个item的keys: {list(first_item.keys())}")
+                if first_item.get('video'):
+                    logger.debug(f"video字段的keys: {list(first_item['video'].keys())}")
             return None
             
         except Exception as e:
             logger.error(f"提取视频 URL 失败: {e}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"从页面提取视频URL失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
 

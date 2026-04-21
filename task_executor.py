@@ -798,6 +798,7 @@ class TaskExecutor:
                 duration=duration or 5,
                 generation_mode=generation_mode,
                 timeout=timeout,
+                output_dir=str(self.output_dir),  # 传递输出目录
                 on_history_id_captured=save_history_id_immediately  # 传递回调函数
             )
             
@@ -805,7 +806,7 @@ class TaskExecutor:
             
             if plugin_result.get("success"):
                 result["success"] = True
-                result["video_url"] = plugin_result.get("video_url")
+                result["video_url"] = plugin_result.get("video_url")  # 可能是网络URL或本地路径
                 result["history_record_id"] = plugin_result.get("history_record_id")
                 
                 logger.info(f"插件调用成功，视频URL: {result['video_url']}")
@@ -813,14 +814,21 @@ class TaskExecutor:
                 
                 # 下载并保存视频
                 if result["video_url"]:
-                    saved_path = self._download_and_save_video(
-                        url=result["video_url"],
-                        task_id=task.id,
-                        task_name=task.name
-                    )
-                    if saved_path:
-                        result["saved_file"] = saved_path
-                        logger.info(f"  ✓ 视频已保存: {saved_path}")
+                    # 判断是本地路径还是网络URL
+                    if result["video_url"].startswith(('http://', 'https://')):
+                        # 网络URL，需要下载
+                        saved_path = self._download_and_save_video(
+                            url=result["video_url"],
+                            task_id=task.id,
+                            task_name=task.name
+                        )
+                        if saved_path:
+                            result["saved_file"] = saved_path
+                            logger.info(f"  ✓ 视频已下载并保存: {saved_path}")
+                    else:
+                        # 本地路径，直接使用
+                        result["saved_file"] = result["video_url"]
+                        logger.info(f"  ✓ 视频已由 Web 插件保存到: {result['video_url']}")
             else:
                 result["error"] = plugin_result.get("error", "插件调用失败")
                 logger.error(f"插件调用失败: {result['error']}")
@@ -982,7 +990,7 @@ class TaskExecutor:
         下载并保存视频
         
         Args:
-            url: 视频URL
+            url: 视频URL（可以是字符串或字典）
             task_id: 任务ID
             task_name: 任务名称
             
@@ -992,8 +1000,26 @@ class TaskExecutor:
         import requests
         
         try:
-            logger.info(f"正在下载视频: {url}")
-            response = requests.get(url, timeout=300)
+            # 如果url是字典（多清晰度），选择最高清晰度
+            if isinstance(url, dict):
+                logger.info(f"检测到多清晰度视频URL，选择最高清晰度")
+                final_url = None
+                for quality in ['origin', '720p', '480p', '360p']:
+                    if quality in url:
+                        video_info = url[quality]
+                        if isinstance(video_info, dict) and video_info.get('video_url'):
+                            final_url = video_info['video_url']
+                            logger.info(f"  选择清晰度: {quality}")
+                            break
+                
+                if not final_url:
+                    logger.error("无法从多清晰度字典中提取视频URL")
+                    return None
+                
+                url = final_url
+            
+            logger.info(f"正在下载视频: {url[:100]}...")
+            response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
             
             # 生成文件名
@@ -1002,15 +1028,30 @@ class TaskExecutor:
             filename = f"task{task_id}_{safe_name}_{timestamp}.mp4"
             filepath = self.output_dir / filename
             
-            # 保存文件
-            with open(filepath, 'wb') as f:
-                f.write(response.content)
+            # 流式下载
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
             
-            logger.info(f"视频保存成功: {filepath}")
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # 显示进度（每10%显示一次）
+                        if total_size > 0:
+                            progress = (downloaded_size / total_size) * 100
+                            if int(progress) % 10 == 0 and downloaded_size < total_size:
+                                logger.info(f"  下载进度: {progress:.1f}% ({downloaded_size}/{total_size} bytes)")
+            
+            logger.info(f"✓ 视频下载成功: {filepath}")
+            logger.info(f"  文件大小: {downloaded_size / 1024 / 1024:.2f} MB")
             return str(filepath)
             
         except Exception as e:
             logger.error(f"下载视频失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def update_task_status(self, task_id: int, status: str, error_message: Optional[str] = None):
