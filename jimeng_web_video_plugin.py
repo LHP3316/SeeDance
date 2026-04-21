@@ -20,6 +20,7 @@
 """
 
 import os
+import json
 import time
 import logging
 from pathlib import Path
@@ -77,7 +78,9 @@ class JimengWebVideoPlugin:
                 "args": [
                     '--disable-blink-features=AutomationControlled',
                     '--disable-dev-shm-usage',
-                    '--no-sandbox'
+                    '--no-sandbox',
+                    f'--window-size=1920,1080',  # 窗口大小
+                    f'--window-position=0,0',  # 窗口位置（屏幕左上角）
                 ]
             }
             
@@ -239,7 +242,8 @@ class JimengWebVideoPlugin:
         ratio: str = "16:9",
         duration: int = 5,
         generation_mode: str = "omni_reference",
-        timeout: int = 900
+        timeout: int = 900,
+        output_dir: str = "output"
     ) -> Dict:
         """
         通过浏览器自动化生成视频
@@ -252,6 +256,7 @@ class JimengWebVideoPlugin:
             duration: 时长（秒，4-15）
             generation_mode: 生成模式（first_end_frame 首尾帧, omni_reference 全能参考）
             timeout: 超时时间（秒）
+            output_dir: 视频保存目录
             
         Returns:
             {
@@ -320,7 +325,7 @@ class JimengWebVideoPlugin:
             
             # 6. 点击生成并等待
             logger.info("[6/6] 开始生成视频...")
-            video_url = self._click_generate_and_wait(timeout=timeout)
+            video_url = self._click_generate_and_wait(timeout=timeout, output_dir=output_dir)
             
             if video_url:
                 result["success"] = True
@@ -438,25 +443,61 @@ class JimengWebVideoPlugin:
             model_selector.click()
             time.sleep(5)  # 等待弹出列表
                         
-            # 3. 在弹出的 listbox 中查找并点击目标模型
-            # 模型选项是 li[role="option"]，内部包含 div.option-label-Fv9c0E 显示模型名称
-            # 先尝试精确匹配
-            model_option = self.page.query_selector(f'li[role="option"] >> div.option-label-Fv9c0E:has-text("{model_name}")')
+            # 2.5. 先输出所有选项用于调试
+            all_options = self.page.query_selector_all('li[role="option"]')
+            logger.info(f"找到 {len(all_options)} 个模型选项:")
+            for i, option in enumerate(all_options):
+                # 只获取模型名称，不包含描述文字
+                label_element = option.query_selector('div.option-label-Fv9c0E')
+                if label_element:
+                    # 使用 JavaScript 获取第一个文本节点
+                    model_text = label_element.evaluate('''el => {
+                        // 获取第一个文本节点的内容
+                        for (let node of el.childNodes) {
+                            if (node.nodeType === Node.TEXT_NODE) {
+                                return node.textContent.trim();
+                            }
+                        }
+                        return el.textContent.trim();
+                    }''')
+                    text_repr = repr(model_text)
+                    logger.info(f"  [{i}] {text_repr}")
                         
-            # 如果没找到，尝试宽松匹配（只匹配 li 中的文本）
-            if not model_option:
-                all_options = self.page.query_selector_all('li[role="option"]')
-                for option in all_options:
-                    text = option.inner_text()
-                    if model_name in text:
-                        model_option = option
-                        logger.info(f"找到模型选项: {text}")
-                        break
+            # 3. 在弹出的 listbox 中查找并点击目标模型
+            # 使用完全精确匹配
+            model_option = None
+            for option in all_options:
+                # 只获取模型名称，不包含描述文字
+                label_element = option.query_selector('div.option-label-Fv9c0E')
+                if not label_element:
+                    continue
+                            
+                # 使用 JavaScript 获取第一个文本节点
+                model_text = label_element.evaluate('''el => {
+                    for (let node of el.childNodes) {
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            return node.textContent.trim();
+                        }
+                    }
+                    return el.textContent.trim();
+                }''')
+                            
+                # 完全精确匹配（字面相等）
+                if model_text == model_name:
+                    model_option = option
+                    logger.info(f"精确匹配到模型选项: {model_text}")
+                    break
                         
             if not model_option:
                 logger.warning(f"未找到模型选项: {model_name}")
                 # 截图调试
                 self.page.screenshot(path="debug_model_options.png")
+                # 输出所有可用选项
+                all_options = self.page.query_selector_all('li[role="option"]')
+                logger.info(f"可用模型选项:")
+                for option in all_options:
+                    text = option.inner_text().strip()
+                    logger.info(f"  - {text}")
                 # 按 ESC 关闭下拉框
                 self.page.keyboard.press('Escape')
                 time.sleep(2)
@@ -748,12 +789,13 @@ class JimengWebVideoPlugin:
             logger.error(f"设置生成参数失败: {e}")
             raise
     
-    def _click_generate_and_wait(self, timeout: int = 900) -> Optional[str]:
+    def _click_generate_and_wait(self, timeout: int = 900, output_dir: str = "output") -> Optional[str]:
         """
         点击生成按钮并等待视频完成
         
         Args:
             timeout: 超时时间（秒）
+            output_dir: 视频保存目录
             
         Returns:
             视频 URL 或 None
@@ -800,6 +842,61 @@ class JimengWebVideoPlugin:
                 logger.warning("按钮处于禁用状态，等待 3 秒后重试...")
                 time.sleep(3)
             
+            # 2. 先设置监听器（在点击之前！）
+            history_record_id = None
+            video_url = None
+            response_count = [0]  # 使用列表来捕获响应
+            
+            def handle_response(response):
+                nonlocal history_record_id, video_url
+                url = response.url
+                method = response.request.method
+                response_count[0] += 1
+                
+                # 输出所有 POST 请求用于调试
+                if method == 'POST':
+                    logger.info(f"📡 捕获到 POST 请求 #{response_count[0]}: {url[:100]}...")
+                
+                # 监听生成请求响应（排除 cancel_generate）
+                if 'generate' in url.lower() and 'cancel' not in url.lower() and method == 'POST':
+                    logger.info(f"✅ 检测到生成请求: {url[:150]}")
+                    try:
+                        data = response.json()
+                        logger.info(f"✅ 捕获到生成请求响应 (第 {response_count[0]} 个响应)")
+                        logger.info(f"响应数据: {json.dumps(data, ensure_ascii=False, indent=2)[:500]}")
+                        # 提取 history_record_id（修正键名：aigc_data 不是 aigo_data）
+                        if data.get('data', {}).get('aigc_data', {}).get('history_record_id'):
+                            history_record_id = data['data']['aigc_data']['history_record_id']
+                            logger.info(f"✅ 获取到 history_record_id: {history_record_id}")
+                            print(f"\n{'='*60}")
+                            print(f"🎯 history_record_id: {history_record_id}")
+                            print(f"{'='*60}\n")
+                        elif data.get('data', {}).get('history_record_id'):
+                            history_record_id = data['data']['history_record_id']
+                            logger.info(f"✅ 获取到 history_record_id: {history_record_id}")
+                            print(f"\n{'='*60}")
+                            print(f"🎯 history_record_id: {history_record_id}")
+                            print(f"{'='*60}\n")
+                        else:
+                            logger.warning(f"响应中没有 history_record_id，data keys: {list(data.get('data', {}).keys())}")
+                    except Exception as e:
+                        logger.warning(f"解析生成响应失败: {e}")
+                        # 尝试获取文本内容
+                        try:
+                            text = response.text()
+                            logger.warning(f"响应文本（前200字符）: {text[:200]}")
+                        except:
+                            pass
+                
+                # 监听视频 URL
+                if '.mp4' in url and 'jimeng' in url:
+                    if 'loading' not in url and 'animation' not in url:
+                        video_url = url
+                        logger.info(f"检测到视频URL: {video_url}")
+            
+            self.page.on("response", handle_response)
+            logger.info("已设置网络监听器")
+            
             # 3. 点击生成按钮
             logger.info("点击生成按钮...")
             
@@ -813,69 +910,112 @@ class JimengWebVideoPlugin:
                 generate_button.evaluate('button => button.click()')
                 logger.info("JavaScript 点击成功")
             
-            time.sleep(5)  # 等待点击生效，避免网络延迟
+            time.sleep(2)  # 等待点击生效，避免网络延迟
             logger.info("已点击生成按钮，等待视频生成...")
             
-            # 2. 等待视频生成完成
-            # 方法1：监听网络请求获取视频URL
-            video_url = None
+            # 4. 等待获取 history_record_id（最多等待 120 秒）
+            logger.info("等待获取 history_record_id...")
+            start_wait = time.time()
+            last_log_time = time.time()
             
-            def handle_response(response):
-                nonlocal video_url
-                # 监听视频相关的响应（排除加载动画）
-                if '.mp4' in response.url and 'jimeng' in response.url:
-                    if 'loading' not in response.url and 'animation' not in response.url:
-                        video_url = response.url
-                        logger.info(f"检测到视频URL: {video_url}")
+            # 使用 page.wait_for_timeout 替代 time.sleep，让事件循环能够处理响应
+            while not history_record_id and (time.time() - start_wait) < 120:
+                elapsed = int(time.time() - start_wait)
+                
+                # 每 10 秒输出一次进度
+                if time.time() - last_log_time >= 10:
+                    logger.info(f"等待中... 已等待 {elapsed} 秒，已捕获 {response_count[0]} 个 POST 请求")
+                    last_log_time = time.time()
+                
+                # 使用 page.wait_for_timeout 让出控制权，让事件循环处理响应
+                self.page.wait_for_timeout(1000)  # 1秒
             
-            self.page.on("response", handle_response)
+            # 再等待 3 秒，确保监听器有足够时间处理响应
+            if history_record_id:
+                logger.info("获取到 history_record_id，等待 3 秒确保处理完成...")
+                self.page.wait_for_timeout(3000)
+            else:
+                logger.warning("等待超时，再等待 3 秒让监听器处理...")
+                self.page.wait_for_timeout(3000)
             
-            # 3. 等待生成完成（最多等待 timeout 秒）
+            if not history_record_id:
+                logger.error(f"❌ 未获取到 history_record_id（已捕获 {response_count[0]} 个 POST 请求）")
+                # 关闭浏览器
+                self._close_browser()
+                raise Exception("未获取到 history_record_id")
+            
+            logger.info(f"✅ 成功获取 history_record_id: {history_record_id}")
+            
+            # 4. 获取 Cookie 并保存
+            logger.info("保存浏览器 Cookie...")
+            cookies = self.context.cookies()
+            cookie_dict = {c['name']: c['value'] for c in cookies}
+            
+            # 保存 Cookie 到文件
+            cookie_file = os.path.join(self.user_data_dir, "cookies.json")
+            with open(cookie_file, 'w', encoding='utf-8') as f:
+                json.dump(cookie_dict, f, ensure_ascii=False, indent=2)
+            logger.info(f"✅ Cookie 已保存到: {cookie_file}")
+            
+            # 5. 关闭浏览器
+            logger.info("关闭浏览器...")
+            self._close_browser()
+            logger.info("✅ 浏览器已关闭")
+            
+            # 5. 通过 API 轮询任务状态并下载视频
+            logger.info(f"开始轮询任务状态: {history_record_id}")
+            video_url = self._poll_and_download_video(history_record_id, output_dir=output_dir)
+            
+            return video_url
+            
+            # 3. 轮询等待视频生成完成
             start_time = time.time()
             last_check_time = 0
+            poll_count = 0
             
             while time.time() - start_time < timeout:
-                # 每 5 秒检查一次，避免频繁查询
-                if time.time() - last_check_time < 5:
+                # 每 10 秒检查一次，避免频繁查询
+                if time.time() - last_check_time < 10:
                     time.sleep(1)
                     continue
                     
                 last_check_time = time.time()
                 elapsed = int(time.time() - start_time)
-                logger.info(f"等待视频生成中... 已等待 {elapsed} 秒")
+                poll_count += 1
                 
-                # 检查是否生成完成
-                try:
-                    # 查找视频播放器
-                    video_element = self.page.query_selector('video')
-                    if video_element:
-                        src = video_element.get_attribute('src')
-                        if src and 'loading' not in src and 'animation' not in src:
-                            video_url = src
-                            logger.info(f"从 video 元素获取URL: {video_url}")
-                            break
+                # 优先检查是否已经通过监听获取到视频 URL
+                if video_url:
+                    logger.info(f"通过网络监听获取到视频 URL")
+                    break
+                
+                # 如果获取到 history_record_id，通过 API 轮询任务状态
+                if history_record_id:
+                    logger.info(f"等待视频生成中... 已等待 {elapsed} 秒（第 {poll_count} 次轮询）")
                     
-                    # 查找下载按钮
-                    download_button = self.page.query_selector('button:has-text("下载")')
-                    if download_button:
-                        logger.info("检测到下载按钮，视频已生成完成")
-                        break
-                    
-                    # 查找“再次生成”按钮（生成完成后会出现）
-                    regenerate_button = self.page.query_selector('button:has-text("再次生成")')
-                    if regenerate_button:
-                        logger.info("检测到再次生成按钮，视频已生成完成")
-                        # 尝试从页面中获取视频URL
-                        video_element = self.page.query_selector('video')
-                        if video_element:
-                            src = video_element.get_attribute('src')
-                            if src:
-                                video_url = src
-                                logger.info(f"从 video 元素获取URL: {video_url}")
-                        break
-                        
-                except:
-                    pass
+                    # 调用 get_history_by_ids 接口查询状态
+                    try:
+                        task_status = self._poll_task_status(history_record_id)
+                        if task_status:
+                            status = task_status.get('status')
+                            # status=50 表示完成
+                            if status == 50:
+                                logger.info("任务已完成，尝试获取视频 URL...")
+                                video_url = self._extract_video_url_from_history(task_status)
+                                if video_url:
+                                    logger.info(f"成功获取视频 URL: {video_url}")
+                                    break
+                            elif status == 30:
+                                logger.error(f"任务失败: {task_status.get('fail_msg', 'unknown')}")
+                                raise Exception(f"视频生成失败: {task_status.get('fail_msg')}")
+                            else:
+                                logger.info(f"任务状态: {status}（处理中）")
+                    except Exception as e:
+                        logger.debug(f"轮询任务状态失败: {e}")
+                else:
+                    logger.info(f"等待视频生成中... 已等待 {elapsed} 秒（第 {poll_count} 次轮询）")
+                    # 等待获取 history_record_id
+                    time.sleep(3)
+                    continue
                 
                 time.sleep(2)
                 
@@ -910,20 +1050,325 @@ class JimengWebVideoPlugin:
             if video_src:
                 return video_src
             
-            # 2. 从 a 标签的 href
-            download_link = self.page.evaluate("""
+            # 2. 从页面中的链接
+            video_links = self.page.evaluate("""
                 () => {
-                    const links = Array.from(document.querySelectorAll('a[href*=".mp4"]'));
-                    return links.length > 0 ? links[0].href : null;
+                    const links = document.querySelectorAll('a[href$=".mp4"]');
+                    return Array.from(links).map(link => link.href);
                 }
             """)
             
-            if download_link:
-                return download_link
+            if video_links and len(video_links) > 0:
+                return video_links[0]
             
-            # 3. 从 API 响应中提取（需要拦截网络请求）
-            # 这部分比较复杂，暂时省略
+            return None
             
+        except Exception as e:
+            logger.error(f"提取视频URL失败: {e}")
+            return None
+    
+    def _poll_and_download_video(self, history_record_id: str, output_dir: str = "output") -> Optional[str]:
+        """
+        轮询任务状态并下载视频
+        
+        Args:
+            history_record_id: 历史记录 ID
+            output_dir: 输出目录
+            
+        Returns:
+            视频本地路径
+        """
+        try:
+            import requests
+            
+            # 确保输出目录存在
+            os.makedirs(output_dir, exist_ok=True)
+            
+            logger.info(f"开始轮询任务: {history_record_id}")
+            check_interval = 10  # 每 10 秒检查一次
+            start_time = time.time()
+            poll_count = 0
+            last_log_time = time.time()
+            
+            # 不设置超时限制，一直轮询直到任务完成或失败
+            while True:
+                poll_count += 1
+                elapsed = int(time.time() - start_time)
+                
+                # 每 60 秒输出一次等待时长提示
+                if time.time() - last_log_time >= 60:
+                    minutes = elapsed // 60
+                    logger.info(f"⏱️ 已等待 {minutes} 分钟，任务仍在处理中...")
+                    last_log_time = time.time()
+                
+                # 调用 API 查询任务状态
+                task_status = self._poll_task_status_by_api(history_record_id)
+                
+                if not task_status:
+                    logger.info(f"等待任务开始... ({elapsed}s / 第 {poll_count} 次轮询)")
+                    time.sleep(check_interval)
+                    continue
+                
+                status = task_status.get('status')
+                
+                # status=50: 任务完成
+                if status == 50:
+                    logger.info(f"✅ 任务已完成！耗时: {elapsed} 秒 ({elapsed//60} 分钟)")
+                    
+                    # 提取视频 URL
+                    video_url = self._extract_video_url_from_history(task_status)
+                    if not video_url:
+                        logger.error("❌ 未找到视频 URL")
+                        return None
+                    
+                    logger.info(f"视频 URL: {video_url}")
+                    
+                    # 下载视频
+                    video_path = self._download_video(video_url, output_dir, history_record_id)
+                    return video_path
+                
+                # status=30: 任务失败
+                elif status == 30:
+                    fail_msg = task_status.get('fail_msg', 'unknown')
+                    fail_code = task_status.get('fail_code', 'unknown')
+                    logger.error(f"❌ 任务失败: {fail_msg} ({fail_code})")
+                    return None
+                
+                # 其他状态: 处理中
+                else:
+                    logger.info(f"⏳ 任务处理中... 状态: {status} ({elapsed}s / 第 {poll_count} 次轮询)")
+                    time.sleep(check_interval)
+            
+        except Exception as e:
+            logger.error(f"轮询并下载视频失败: {e}")
+            return None
+    
+    def _poll_task_status_by_api(self, history_record_id: str) -> Optional[Dict]:
+        """
+        通过 API 轮询任务状态（使用 requests 库）
+        
+        Args:
+            history_record_id: 历史记录 ID
+            
+        Returns:
+            任务状态数据
+        """
+        try:
+            import requests
+            
+            # 从 cookie 文件读取 Cookie
+            cookie_file = os.path.join(self.user_data_dir, "cookies.json")
+            if not os.path.exists(cookie_file):
+                logger.error(f"Cookie 文件不存在: {cookie_file}")
+                return None
+            
+            with open(cookie_file, 'r', encoding='utf-8') as f:
+                cookies = json.load(f)
+            
+            # 构造 Cookie 字符串
+            cookie_str = '; '.join([f"{k}={v}" for k, v in cookies.items()])
+            
+            # 构造请求
+            url = f"https://jimeng.jianying.com/mweb/v1/get_history_by_ids"
+            params = {
+                "aid": "513695",
+                "device_platform": "web",
+                "region": "cn",
+                "web_id": cookies.get('passport_csrf_token', ''),
+            }
+            
+            headers = {
+                "Cookie": cookie_str,
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Origin": "https://jimeng.jianying.com",
+                "Referer": "https://jimeng.jianying.com/ai-tool/generate?workspace=0&type=video",
+            }
+            
+            data = {
+                "history_ids": [history_record_id],
+                "image_info": {
+                    "width": 2048,
+                    "height": 2048,
+                    "format": "webp",
+                    "image_scene_list": [
+                        {"scene": "normal", "width": 2400, "height": 2400, "uniq_key": "2400", "format": "webp"},
+                        {"scene": "loss", "width": 1080, "height": 1080, "uniq_key": "1080", "format": "webp"}
+                    ]
+                }
+            }
+            
+            # 发送请求
+            response = requests.post(url, params=params, json=data, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            if result.get('ret') != '0':
+                logger.debug(f"API 返回错误: {result}")
+                return None
+            
+            # 提取任务数据
+            history_data = result.get('data', {}).get(history_record_id, {})
+            if not history_data:
+                return None
+            
+            return history_data
+            
+        except Exception as e:
+            logger.debug(f"轮询任务状态失败: {e}")
+            return None
+    
+    def _download_video(self, video_url: str, output_dir: str, history_record_id: str) -> Optional[str]:
+        """
+        下载视频到本地
+        
+        Args:
+            video_url: 视频 URL
+            output_dir: 输出目录
+            history_record_id: 历史记录 ID
+            
+        Returns:
+            本地视频路径
+        """
+        try:
+            import requests
+            
+            logger.info(f"开始下载视频...")
+            
+            # 生成文件名
+            timestamp = int(time.time())
+            filename = f"jimeng_video_{history_record_id}_{timestamp}.mp4"
+            filepath = os.path.join(output_dir, filename)
+            
+            # 下载视频
+            response = requests.get(video_url, stream=True, timeout=300)
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        # 显示进度
+                        if total_size > 0:
+                            percent = (downloaded / total_size) * 100
+                            if downloaded % (total_size // 10) < 8192:  # 每 10% 显示一次
+                                logger.info(f"下载进度: {percent:.1f}% ({downloaded}/{total_size})")
+            
+            logger.info(f"✅ 视频下载成功: {filepath}")
+            print(f"\n{'='*60}")
+            print(f"🎉 视频已保存: {filepath}")
+            print(f"{'='*60}\n")
+            
+            return filepath
+            
+        except Exception as e:
+            logger.error(f"下载视频失败: {e}")
+            return None
+    
+    def _poll_task_status(self, history_record_id: str) -> Optional[Dict]:
+        """
+        轮询任务状态（调用 get_history_by_ids 接口）
+        
+        Args:
+            history_record_id: 历史记录 ID
+            
+        Returns:
+            任务状态信息
+        """
+        try:
+            # 构造请求
+            url = f"{self.base_url}/mweb/v1/get_history_by_ids"
+            
+            # 使用 page.evaluate 发送请求（复用浏览器的 cookie）
+            result = self.page.evaluate("""
+                async (historyId) => {
+                    const response = await fetch('/mweb/v1/get_history_by_ids?aid=513695&device_platform=web&region=cn', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            history_ids: [historyId],
+                            image_info: {
+                                width: 2048,
+                                height: 2048,
+                                format: 'webp',
+                                image_scene_list: [
+                                    {scene: 'normal', width: 2400, height: 2400, uniq_key: '2400', format: 'webp'},
+                                    {scene: 'loss', width: 1080, height: 1080, uniq_key: '1080', format: 'webp'}
+                                ]
+                            }
+                        })
+                    });
+                    return await response.json();
+                }
+            """, history_record_id)
+            
+            if not result or result.get('ret') != '0':
+                logger.debug(f"轮询接口返回错误: {result}")
+                return None
+            
+            # 提取任务数据
+            history_data = result.get('data', {}).get(history_record_id, {})
+            if not history_data:
+                return None
+            
+            return history_data
+            
+        except Exception as e:
+            logger.debug(f"轮询任务状态异常: {e}")
+            return None
+    
+    def _extract_video_url_from_history(self, history_data: Dict) -> Optional[str]:
+        """
+        从历史数据中提取视频 URL
+        
+        Args:
+            history_data: 任务历史数据
+            
+        Returns:
+            视频 URL
+        """
+        try:
+            # 尝试从多个路径提取视频 URL
+            
+            # 1. 从 resources 提取
+            resources = history_data.get('resources', [])
+            for resource in resources:
+                if resource.get('type') == 'video':
+                    video_info = resource.get('video_info', {})
+                    video_url = video_info.get('video_url')
+                    if video_url:
+                        return video_url
+            
+            # 2. 从 item_list 提取
+            item_list = history_data.get('item_list', [])
+            for item in item_list:
+                video = item.get('video', {})
+                if video:
+                    # 尝试多个字段
+                    video_url = video.get('video_url') or video.get('play_addr', {}).get('url_list', [None])[0]
+                    if video_url:
+                        return video_url
+            
+            # 3. 从 aigo_data 提取
+            aigo_data = history_data.get('aigo_data', {})
+            if aigo_data:
+                video_url = aigo_data.get('video_url')
+                if video_url:
+                    return video_url
+            
+            logger.warning("未从历史数据中找到视频 URL")
+            return None
+            
+        except Exception as e:
+            logger.error(f"提取视频 URL 失败: {e}")
             return None
             
         except Exception as e:
