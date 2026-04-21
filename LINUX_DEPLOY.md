@@ -3,13 +3,8 @@
 ## 1. 安装 Git
 
 ```bash
-# Ubuntu/Debian
 sudo apt update
 sudo apt install git -y
-
-# CentOS/RHEL
-sudo yum update
-sudo yum install git -y
 
 # 验证
 git --version
@@ -110,45 +105,64 @@ pip install playwright
 # 安装浏览器
 playwright install chromium
 
-# 安装系统依赖（Ubuntu/Debian）
+# 安装系统依赖
 playwright install-deps chromium
-
-# 安装系统依赖（CentOS/RHEL）
-sudo yum install -y atk at-spi2-atk libdrm libXcomposite libXcursor libXdamage libXext libXi libXrandr libXScrnSaver libXtst pango atkmm cairo-gobject cups-libs gdk-pixbuf2 libgio libnotify libXt libgbm mesa-libgbm
 ```
 
-## 9. 配置数据库
+## 9. 安装 MySQL
 
 ```bash
-# 安装 MySQL（如果需要）
-# Ubuntu/Debian
-sudo apt install mysql-server -y
+# 安装 MariaDB（MySQL 兼容版本）
+sudo apt-get update
+sudo apt-get install -y mariadb-server
 
-# CentOS/RHEL
-sudo yum install mysql-server -y
-sudo systemctl start mysqld
-sudo systemctl enable mysqld
+# 启动服务
+service mariadb start
 
-# 创建数据库
-mysql -u root -p
-CREATE DATABASE seedance CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'seedance'@'localhost' IDENTIFIED BY 'your_password';
-GRANT ALL PRIVILEGES ON seedance.* TO 'seedance'@'localhost';
+# 进入数据库
+mysql
+```
+
+**在数据库中执行：**
+```sql
+CREATE DATABASE seedance_backend CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('root');
 FLUSH PRIVILEGES;
+EXIT;
+```
+
+**之后登录数据库需要密码：**
+```bash
+mysql -u root -proot
+```
+
+**常用数据库命令：**
+```bash
+# 查看所有数据库
+mysql -u root -proot -e "SHOW DATABASES;"
+
+# 进入数据库后查看
+mysql -u root -proot
+SHOW DATABASES;
+USE seedance_backend;
+SHOW TABLES;
 EXIT;
 ```
 
 ## 10. 配置环境变量
 
 ```bash
-# 复制环境配置文件
+# 复制环境配置文件到 backend 目录（后端读取）
 cp backend/.env.example backend/.env
 
-# 编辑配置
+# 复制一份到根目录（可选）
+cp backend/.env.example .env
+
+# 编辑 backend 目录的配置
 nano backend/.env
 
-# 修改以下内容：
-# DATABASE_URL=mysql+pymysql://seedance:your_password@localhost:3306/seedance
+# 修改数据库连接：
+# DATABASE_URL=mysql+pymysql://root:root@localhost:3306/seedance_backend
 # 其他配置...
 ```
 
@@ -161,10 +175,7 @@ conda activate video
 # 进入 backend 目录
 cd backend
 
-# 执行初始化脚本
-mysql -u seedance -p seedance < init_database_full.sql
-
-# 或者使用 SQLAlchemy 自动创建
+# 初始化数据库表
 python -c "from database import engine; from models import *; Base.metadata.create_all(bind=engine)"
 ```
 
@@ -191,10 +202,11 @@ python --version
 # 检查依赖
 pip list | grep -E "playwright|sqlalchemy|fastapi"
 
-# 检查浏览器
-playwright install --dry-run chromium
+# 检查 Playwright
+python -c 'from playwright.sync_api import sync_playwright; print("Playwright 安装成功")'
 
 # 检查数据库连接
+cd backend
 python -c "from database import SessionLocal; db = SessionLocal(); print('数据库连接成功'); db.close()"
 ```
 
@@ -230,3 +242,5 @@ pip config list
 3. 数据库密码需要替换为实际密码
 4. 确保服务器防火墙开放必要端口（如 8000、3306）
 5. 生产环境建议使用 systemd 或 supervisor 管理进程
+6. **pip 镜像源**：如果淘宝源超时，可切换为阿里云或清华源
+7. **Git 推送需要代理**：使用 `ssh -p 22222 -R 7897:127.0.0.1:7897 visiontree@123.191.135.94` 建立反向代理

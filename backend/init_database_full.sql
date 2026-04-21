@@ -9,16 +9,16 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ==========================================
--- 1. 创建数据库和用户
--- ==========================================
-CREATE DATABASE IF NOT EXISTS seedance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- -- ==========================================
+-- -- 1. 创建数据库和用户
+-- -- ==========================================
+-- CREATE DATABASE IF NOT EXISTS seedance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE USER IF NOT EXISTS 'seedance'@'localhost' IDENTIFIED BY 'seedance123';
-GRANT ALL PRIVILEGES ON seedance_db.* TO 'seedance'@'localhost';
-FLUSH PRIVILEGES;
+-- CREATE USER IF NOT EXISTS 'seedance'@'localhost' IDENTIFIED BY 'seedance123';
+-- GRANT ALL PRIVILEGES ON seedance_db.* TO 'seedance'@'localhost';
+-- FLUSH PRIVILEGES;
 
-USE seedance_db;
+-- USE seedance_db;
 
 -- ==========================================
 -- 2. 用户表 (users)

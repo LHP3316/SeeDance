@@ -67,6 +67,10 @@ browser_data/
 node_modules/
 frontend/node_modules/
 
+# Vite 构建产物
+frontend/.vite/
+frontend/dist/
+
 # 调试文件
 debug_*.py
 test_api_connection.py
