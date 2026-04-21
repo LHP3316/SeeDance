@@ -48,6 +48,7 @@ class Task(Base):
     error_message = Column(Text, nullable=True)
     image_material_id = Column(Integer, nullable=True)
     video_material_id = Column(Integer, nullable=True)
+    history_record_id = Column(String(100), nullable=True)  # 即梦平台历史记录ID
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

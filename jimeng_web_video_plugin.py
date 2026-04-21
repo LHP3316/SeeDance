@@ -47,9 +47,12 @@ class JimengWebVideoPlugin:
         self.browser = None
         self.context = None
         self.page = None
+        self._keep_browser_open = False  # 登录失败时保持浏览器打开
         
-        # 即梦网页 URL
-        self.jimeng_url = "https://jimeng.jianying.com"
+        # 即梦网页基础 URL
+        self.jimeng_base_url = "https://jimeng.jianying.com"
+        # 即梦首页（启动时访问）
+        self.jimeng_home_url = f"{self.jimeng_base_url}/ai-tool/home/"
         
         # 浏览器数据目录（持久化 Cookie 和登录状态）
         self.user_data_dir = str(Path(__file__).parent / "browser_data")
@@ -134,7 +137,7 @@ class JimengWebVideoPlugin:
             self._launch_browser()
             
             # 打开即梦网页
-            self.page.goto(self.jimeng_url, wait_until="domcontentloaded", timeout=30000)
+            self.page.goto(self.jimeng_home_url, wait_until="domcontentloaded", timeout=30000)
             self.page.wait_for_timeout(2000)
             
             logger.info("[JimengWebVideoPlugin] 已打开即梦网页")
@@ -193,45 +196,69 @@ class JimengWebVideoPlugin:
             True 已登录，False 未登录
         """
         try:
-            # 方法1：检查是否存在用户头像或用户名元素
-            user_elements = [
-                '.avatar',           # 头像
-                '.user-name',        # 用户名
-                '[class*="avatar"]', # 包含 avatar 的类
-                '[class*="user"]',   # 包含 user 的类
-                'text="我的"',       # 我的按钮
-                'text="空间"',       # 空间按钮
-            ]
+            # 方法1：检查 URL 是否包含登录相关路径
+            current_url = self.page.url
+            if '/login' in current_url or '/auth' in current_url:
+                logger.debug(f"[JimengWebVideoPlugin] 当前URL包含登录路径: {current_url}")
+                return False
             
-            for selector in user_elements:
-                try:
-                    element = self.page.query_selector(selector)
-                    if element and element.is_visible():
-                        return True
-                except:
-                    continue
-            
-            # 方法2：检查是否有登录按钮（如果看不到登录按钮说明已登录）
-            login_buttons = [
+            # 方法2：检查页面是否有明显的“登录”按钮（多种可能的文本和位置）
+            login_indicators = [
                 'text="登录"',
                 'text="登 录"',
                 'text="扫码登录"',
+                'text="立即登录"',
+                'a:has-text("登录")',  # 链接中包含“登录”
+                'button:has-text("登录")',  # 按钮中包含“登录”
             ]
             
-            for selector in login_buttons:
+            for selector in login_indicators:
                 try:
-                    element = self.page.query_selector(selector)
-                    if element and element.is_visible():
-                        # 看到登录按钮，说明未登录
-                        return False
-                except:
+                    elements = self.page.query_selector_all(selector)
+                    for element in elements:
+                        if element and element.is_visible():
+                            text = element.inner_text().strip()
+                            logger.debug(f"[JimengWebVideoPlugin] 找到登录按钮: {text}")
+                            return False  # 找到登录按钮，说明未登录
+                except Exception as e:
+                    logger.debug(f"[JimengWebVideoPlugin] 检查登录指示器失败: {selector}, {e}")
                     continue
             
-            # 如果看不到登录按钮，说明可能已登录
-            return True
+            # 方法3：检查是否有用户头像或用户名（已登录的标志）
+            user_indicators = [
+                'img.avatar',  # 头像图片
+                '.user-avatar img',
+                '[class*="avatar"] img',
+            ]
+            
+            for selector in user_indicators:
+                try:
+                    elements = self.page.query_selector_all(selector)
+                    for element in elements:
+                        if element and element.is_visible():
+                            src = element.get_attribute('src') or ''
+                            # 头像应该有真实的图片URL，不是占位符
+                            if src and 'placeholder' not in src and src != '#':
+                                logger.debug(f"[JimengWebVideoPlugin] 找到用户头像: {src[:50]}")
+                                return True  # 找到真实头像，说明已登录
+                except Exception as e:
+                    logger.debug(f"[JimengWebVideoPlugin] 检查用户标识失败: {selector}, {e}")
+                    continue
+            
+            # 方法4：检查是否有 Cookie 中的登录标识
+            cookies = self.context.cookies()
+            for cookie in cookies:
+                if cookie['name'] in ['session_id', 'passport_csrf_token', 'uid', 'user_id']:
+                    if cookie['value'] and cookie['value'] != '':
+                        logger.debug(f"[JimengWebVideoPlugin] 找到登录Cookie: {cookie['name']}")
+                        return True
+            
+            # 如果以上都没找到，默认为未登录（更安全）
+            logger.warning("[JimengWebVideoPlugin] 未能确定登录状态，默认为未登录")
+            return False
             
         except Exception as e:
-            logger.debug(f"[JimengWebVideoPlugin] 检查登录状态失败: {e}")
+            logger.error(f"[JimengWebVideoPlugin] 检查登录状态异常: {e}")
             return False
     
     def generate_video(
@@ -243,7 +270,8 @@ class JimengWebVideoPlugin:
         duration: int = 5,
         generation_mode: str = "omni_reference",
         timeout: int = 900,
-        output_dir: str = "output"
+        output_dir: str = "output",
+        on_history_id_captured=None
     ) -> Dict:
         """
         通过浏览器自动化生成视频
@@ -257,52 +285,138 @@ class JimengWebVideoPlugin:
             generation_mode: 生成模式（first_end_frame 首尾帧, omni_reference 全能参考）
             timeout: 超时时间（秒）
             output_dir: 视频保存目录
+            on_history_id_captured: history_record_id 捕获后的回调函数，立即调用
             
         Returns:
             {
                 "success": bool,
                 "video_url": str,
                 "saved_file": str,
+                "history_record_id": str,  # 即梦平台历史记录ID
                 "error": str
             }
         """
+        # 方法入口日志
+        logger.info("="*70)
+        logger.info("🎬 [JimengWebVideoPlugin.generate_video] 方法被调用！")
+        logger.info("="*70)
+        logger.info(f"  → image_paths: {image_paths}")
+        logger.info(f"  → prompt: {prompt[:50]}...")
+        logger.info(f"  → model: {model}")
+        logger.info(f"  → ratio: {ratio}")
+        logger.info(f"  → duration: {duration}")
+        logger.info(f"  → generation_mode: {generation_mode}")
+        logger.info(f"  → timeout: {timeout}")
+        logger.info(f"  → output_dir: {output_dir}")
+        logger.info("="*70)
+        
         result = {
             "success": False,
             "video_url": None,
             "saved_file": None,
+            "history_record_id": None,  # 即梦平台历史记录ID
             "error": None
         }
         
         try:
             # 1. 启动浏览器
             logger.info("[1/6] 启动浏览器...")
+            logger.info("[1/6]   → 正在初始化 Playwright...")
             self._launch_browser()
+            logger.info("[1/6]   ✓ 浏览器启动成功")
             
             # 2. 打开即梦网页（带重试机制）
             logger.info("[2/6] 打开即梦网页...")
+            logger.info(f"[2/6]   → URL: {self.jimeng_home_url}")
             max_retries = 3
             retry_count = 0
             page_loaded = False
             
             while retry_count < max_retries:
                 try:
-                    self.page.goto(self.jimeng_url, wait_until="domcontentloaded", timeout=30000)
+                    logger.info(f"[2/6]   → 尝试加载网页（{retry_count + 1}/{max_retries}）...")
+                    self.page.goto(self.jimeng_home_url, wait_until="domcontentloaded", timeout=30000)
+                    logger.info(f"[2/6]   → 等待页面稳定...")
                     self.page.wait_for_timeout(2000)
                     page_loaded = True
-                    logger.info(f"[JimengWebVideoPlugin] 网页加载成功（尝试 {retry_count + 1}/{max_retries}）")
+                    logger.info(f"[2/6]   ✓ 网页加载成功（尝试 {retry_count + 1}/{max_retries}）")
                     break
                 except Exception as e:
                     retry_count += 1
-                    logger.warning(f"[JimengWebVideoPlugin] 网页加载失败（{retry_count}/{max_retries}）: {e}")
+                    logger.warning(f"[2/6]   ✗ 网页加载失败（{retry_count}/{max_retries}）: {e}")
                     
                     if retry_count < max_retries:
-                        logger.info(f"[JimengWebVideoPlugin] 等待 3 秒后重试...")
+                        logger.info(f"[2/6]   → 等待 3 秒后重试...")
                         time.sleep(3)
                     else:
                         raise Exception(f"网页加载失败，已重试 {max_retries} 次")
             
             if not page_loaded:
                 raise Exception("网页加载失败")
+            
+            # 2.5 先导航到首页，等待30秒后再检测登录状态
+            logger.info("[2.5/6] 导航到首页并等待加载...")
+            logger.info(f"[2.5/6]   → 访问: {self.jimeng_home_url}")
+            
+            try:
+                self.page.goto(self.jimeng_home_url, wait_until="domcontentloaded", timeout=30000)
+                logger.info(f"[2.5/6]   → 等待30秒让页面完全加载...")
+                self.page.wait_for_timeout(30000)  # 等待30秒
+                logger.info(f"[2.5/6]   ✓ 首页加载完成")
+            except Exception as e:
+                logger.warning(f"[2.5/6]   ⚠️ 首页加载失败: {e}")
+            
+            # 2.6 检查登录状态
+            logger.info("[2.6/6] 检查登录状态...")
+            logger.info("[2.6/6]   → 开始检测页面登录状态...")
+            
+            try:
+                is_logged = self._check_is_logged_in()
+                logger.info(f"[2.6/6]   → 检测结果: {'已登录' if is_logged else '未登录'}")
+            except Exception as e:
+                logger.error(f"[2.6/6]   ✗ 登录检测异常: {e}")
+                is_logged = False
+            
+            if not is_logged:
+                logger.warning("[2.6/6]   ⚠️ 未检测到登录状态！")
+                logger.info("[2.6/6]   → 浏览器将保持打开，请在浏览器中登录即梦账号")
+                logger.info("[2.6/6]   → 等待登录中（最多300秒）...")
+                logger.info("[2.6/6]   → 提示：请查看弹出的浏览器窗口，手动扫码登录")
+                
+                # 等待登录（较长超时，给用户时间登录）
+                max_wait = 300
+                check_interval = 2
+                elapsed = 0
+                logged_in = False
+                
+                while elapsed < max_wait:
+                    try:
+                        time.sleep(check_interval)
+                        elapsed += check_interval
+                        
+                        try:
+                            if self._check_is_logged_in():
+                                logger.info(f"[2.6/6]   ✅ 检测到用户已登录（等待了 {elapsed} 秒）")
+                                logged_in = True
+                                break
+                        except Exception as check_err:
+                            logger.debug(f"[2.6/6]   → 检查登录状态异常: {check_err}")
+                        
+                        if elapsed % 10 == 0:
+                            logger.info(f"[2.6/6]   → 等待登录中... ({elapsed}/{max_wait}秒) - 浏览器窗口应保持打开")
+                    except Exception as e:
+                        logger.error(f"[2.6/6]   ✗ 等待登录异常: {e}")
+                        break
+                
+                if not logged_in:
+                    result["error"] = f"未登录！请在浏览器中登录即梦账号（等待了{max_wait}秒超时）"
+                    logger.error(f"[2.6/6]   ✗ {result['error']}")
+                    logger.error("提示：浏览器窗口应该还在，请手动登录后重试任务")
+                    # 不关闭浏览器，让用户可以继续操作
+                    self._keep_browser_open = True
+                    return result
+            else:
+                logger.info("[2.6/6]   ✅ 已登录，继续执行")
             
             # 3. 选择视频生成模式
             logger.info("[3/6] 选择视频生成模式...")
@@ -325,12 +439,18 @@ class JimengWebVideoPlugin:
             
             # 6. 点击生成并等待
             logger.info("[6/6] 开始生成视频...")
-            video_url = self._click_generate_and_wait(timeout=timeout, output_dir=output_dir)
+            generate_result = self._click_generate_and_wait(
+                timeout=timeout, 
+                output_dir=output_dir,
+                on_history_id_captured=on_history_id_captured
+            )
             
-            if video_url:
+            if generate_result and generate_result.get("video_url"):
                 result["success"] = True
-                result["video_url"] = video_url
-                logger.info(f"视频生成成功: {video_url}")
+                result["video_url"] = generate_result["video_url"]
+                result["history_record_id"] = generate_result.get("history_record_id")
+                logger.info(f"视频生成成功: {generate_result['video_url']}")
+                logger.info(f"history_record_id: {generate_result.get('history_record_id')}")
             else:
                 result["error"] = "视频生成失败，未获取到视频URL"
                 logger.error(result["error"])
@@ -340,8 +460,12 @@ class JimengWebVideoPlugin:
             logger.error(f"[JimengWebVideoPlugin] 生成视频失败: {e}", exc_info=True)
         
         finally:
-            # 关闭浏览器
-            self._close_browser()
+            # 关闭浏览器（但如果是登录失败，保持浏览器打开让用户操作）
+            if not getattr(self, '_keep_browser_open', False):
+                self._close_browser()
+            else:
+                logger.info("[JimengWebVideoPlugin] 保持浏览器打开（登录失败场景）")
+                self._keep_browser_open = False  # 重置标志
         
         return result
     
@@ -349,7 +473,7 @@ class JimengWebVideoPlugin:
         """导航到视频生成页面"""
         try:
             # 直接访问视频生成页面
-            video_gen_url = f"{self.jimeng_url}/ai-tool/generate?workspace=0&type=video"
+            video_gen_url = f"{self.jimeng_base_url}/ai-tool/generate?workspace=0&type=video"
             logger.info(f"导航到视频生成页面: {video_gen_url}")
             
             self.page.goto(video_gen_url, wait_until="domcontentloaded", timeout=30000)
@@ -510,7 +634,11 @@ class JimengWebVideoPlugin:
             # 4. 点击目标模型
             logger.info(f"选择模型: {model_name}")
             model_option.click()
-            time.sleep(5)
+            time.sleep(3)
+            
+            # 5. 按 ESC 关闭下拉框（重要！避免影响后续操作）
+            self.page.keyboard.press('Escape')
+            time.sleep(2)
                         
             logger.info(f"模型选择完成: {model_name}")
             
@@ -608,40 +736,59 @@ class JimengWebVideoPlugin:
             except:
                 pass
     
-    def _select_duration(self, duration: int):
+    def _select_duration(self, duration: str):
         """
         选择时长（垂直下拉列表）
         
         Args:
-            duration: 时长（秒），如 5
+            duration: 时长字符串，如 "4s", "5s"
         """
         try:
+            # 提取时长数字
+            import re
+            if isinstance(duration, str):
+                match = re.search(r'(\d+)', duration)
+                if match:
+                    target_duration = int(match.group(1))
+                else:
+                    logger.warning(f"无法从 '{duration}' 中提取时长数字")
+                    return
+            else:
+                target_duration = int(duration)
+            
             # 1. 点击时长按钮（底部工具栏显示时长的 span）
-            # 查找所有 lv-select-view-value，找到包含秒数的
+            # 查找所有 lv-select-view-value 元素
             all_spans = self.page.query_selector_all('span.lv-select-view-value')
-            duration_span = None
-            current_duration = None
             
-            for span in all_spans:
+            # 调试：打印所有元素
+            logger.info(f"[调试] 找到 {len(all_spans)} 个 span.lv-select-view-value 元素:")
+            for idx, span in enumerate(all_spans):
                 text = span.inner_text()
-                if 's' in text and any(c.isdigit() for c in text):
-                    duration_span = span
-                    # 提取当前时长数字
-                    import re
-                    match = re.search(r'(\d+)s', text)
-                    if match:
-                        current_duration = int(match.group(1))
-                    break
+                logger.info(f"[调试]   索引[{idx}]: {repr(text)}")
             
-            if not duration_span:
-                logger.warning(f"未找到时长按钮")
+            if len(all_spans) == 0:
+                logger.warning(f"未找到任何 lv-select-view-value 元素")
                 return
             
-            logger.info(f"当前时长: {current_duration}s，目标时长: {duration}s")
+            # 使用最后一个元素作为时长按钮
+            duration_span = all_spans[-1]  # 最后一个元素
+            
+            # 提取当前时长数字
+            text = duration_span.inner_text()
+            logger.info(f"[调试] 使用时长按钮（最后一个元素）: {repr(text)}")
+            
+            match = re.search(r'(\d+)', text)
+            if match:
+                current_duration = int(match.group(1))
+            else:
+                logger.warning(f"无法从时长按钮提取数字: {text}")
+                return
+            
+            logger.info(f"当前时长: {current_duration}s，目标时长: {duration}")
             
             # 如果已经是目标时长，不需要选择
-            if current_duration == duration:
-                logger.info(f"当前时长已经是 {duration}s，无需选择")
+            if current_duration == target_duration:
+                logger.info(f"当前时长已经是 {duration}，无需选择")
                 return
             
             logger.info(f"点击时长按钮...")
@@ -651,13 +798,13 @@ class JimengWebVideoPlugin:
             # 2. 在列表中查找目标时长
             # 时长选项垂直排列：4s, 5s, 6s, 7s, 8s, 9s, 10s...
             # 需要根据当前时长和目标时长计算移动次数
-            # 当前在 current_duration 的位置，要移动到 duration 的位置
+            # 当前在 current_duration 的位置，要移动到 target_duration 的位置
             # 4s=索引0, 5s=索引1, 6s=索引2, 以此类推
             
             # 从当前项移动到目标项的步数
-            steps = duration - current_duration
+            steps = target_duration - current_duration
             
-            logger.info(f"需要按 {abs(steps)} 次{'下' if steps > 0 else '上'}箭头选择 {duration}s")
+            logger.info(f"需要按 {abs(steps)} 次{'下' if steps > 0 else '上'}箭头选择 {duration}")
             
             if steps > 0:
                 # 向下移动
@@ -675,9 +822,13 @@ class JimengWebVideoPlugin:
             # 3. 按回车确认选择
             logger.info(f"按回车确认选择...")
             self.page.keyboard.press('Enter')
-            time.sleep(3)
+            time.sleep(2)
             
-            logger.info(f"时长选择完成: {duration}s")
+            # 4. 按 ESC 确保下拉框关闭（重要！避免影响后续操作）
+            self.page.keyboard.press('Escape')
+            time.sleep(2)
+            
+            logger.info(f"时长选择完成: {duration}")
             
         except Exception as e:
             logger.error(f"选择时长失败: {e}")
@@ -784,8 +935,8 @@ class JimengWebVideoPlugin:
             self._select_ratio(ratio)
             time.sleep(3)  # 等待比例选择完成
             
-            # 4. 选择时长（5s）
-            logger.info(f"选择时长: {duration}s")
+            # 4. 选择时长（如 4s）
+            logger.info(f"选择时长: {duration}")
             self._select_duration(duration)
             time.sleep(3)  # 等待时长选择完成
             
@@ -793,16 +944,21 @@ class JimengWebVideoPlugin:
             logger.error(f"设置生成参数失败: {e}")
             raise
     
-    def _click_generate_and_wait(self, timeout: int = 900, output_dir: str = "output") -> Optional[str]:
+    def _click_generate_and_wait(self, timeout: int = 900, output_dir: str = "output", 
+                                  on_history_id_captured=None) -> Optional[Dict]:
         """
         点击生成按钮并等待视频完成
         
         Args:
             timeout: 超时时间（秒）
             output_dir: 视频保存目录
+            on_history_id_captured: history_record_id 捕获后的回调函数
             
         Returns:
-            视频 URL 或 None
+            {
+                "video_url": str,
+                "history_record_id": str
+            } 或 None
         """
         try:
             # 1. 查找生成按钮（多种选择器尝试）
@@ -875,12 +1031,28 @@ class JimengWebVideoPlugin:
                             print(f"\n{'='*60}")
                             print(f"🎯 history_record_id: {history_record_id}")
                             print(f"{'='*60}\n")
+                            
+                            # 立即调用回调函数保存 history_record_id
+                            if on_history_id_captured:
+                                try:
+                                    on_history_id_captured(history_record_id)
+                                    logger.info(f"✅ 已通过回调函数保存 history_record_id")
+                                except Exception as cb_err:
+                                    logger.error(f"回调函数执行失败: {cb_err}")
                         elif data.get('data', {}).get('history_record_id'):
                             history_record_id = data['data']['history_record_id']
                             logger.info(f"✅ 获取到 history_record_id: {history_record_id}")
                             print(f"\n{'='*60}")
                             print(f"🎯 history_record_id: {history_record_id}")
                             print(f"{'='*60}\n")
+                            
+                            # 立即调用回调函数保存 history_record_id
+                            if on_history_id_captured:
+                                try:
+                                    on_history_id_captured(history_record_id)
+                                    logger.info(f"✅ 已通过回调函数保存 history_record_id")
+                                except Exception as cb_err:
+                                    logger.error(f"回调函数执行失败: {cb_err}")
                         else:
                             logger.warning(f"响应中没有 history_record_id，data keys: {list(data.get('data', {}).keys())}")
                     except Exception as e:
@@ -970,7 +1142,11 @@ class JimengWebVideoPlugin:
             logger.info(f"开始轮询任务状态: {history_record_id}")
             video_url = self._poll_and_download_video(history_record_id, output_dir=output_dir)
             
-            return video_url
+            # 返回 video_url 和 history_record_id
+            return {
+                "video_url": video_url,
+                "history_record_id": history_record_id
+            }
             
             # 3. 轮询等待视频生成完成
             start_time = time.time()

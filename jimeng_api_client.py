@@ -669,19 +669,44 @@ class JimengAPIClient:
         Returns:
             生成结果
         """
-        logger.info(f"[Jimeng] 开始轮询，最大等待时间: {max_wait_time}秒")
+        logger.info(f"\n{'='*70}")
+        logger.info(f"🖼️  [Jimeng] 开始轮询图片生成结果")
+        logger.info(f"{'='*70}")
+        logger.info(f"  📝 History ID : {history_id}")
+        logger.info(f"  📤 Submit ID  : {submit_id or '无'}")
+        logger.info(f"  ⏱️  最大等待时间: {max_wait_time}秒")
+        logger.info(f"  🔄 检查间隔   : {check_interval}秒")
+        logger.info(f"{'='*70}\n")
         
         max_retries = max_wait_time // check_interval
+        start_time = time.time()
         
         for attempt in range(max_retries):
             time.sleep(check_interval)
             
+            elapsed_time = int(time.time() - start_time)
+            progress = (attempt + 1) / max_retries * 100
+            
+            # 生成进度条
+            bar_length = 30
+            filled_length = int(bar_length * (attempt + 1) / max_retries)
+            bar = '█' * filled_length + '░' * (bar_length - filled_length)
+            
+            # 每次轮询都输出进度
+            logger.info(f"\n[轮询 {attempt + 1}/{max_retries}] {bar} {progress:.1f}%")
+            logger.info(f"  ⏱️  已等待: {elapsed_time}秒 | 剩余: {max_wait_time - elapsed_time}秒")
+            
             # 尝试通过submit_id获取（优先）
             if submit_id:
+                logger.info(f"  → 尝试通过 Submit ID 获取结果...")
                 image_urls = self._get_images_by_submit_id(submit_id)
                 if image_urls:
-                    elapsed_time = (attempt + 1) * check_interval
-                    logger.info(f"[Jimeng] 图片生成成功！耗时: {elapsed_time}秒，图片数量: {len(image_urls)}")
+                    logger.info(f"\n{'='*70}")
+                    logger.info(f"✅ [Jimeng] 图片生成成功！")
+                    logger.info(f"   - 获取方式  : Submit ID")
+                    logger.info(f"   - 总耗时    : {elapsed_time}秒")
+                    logger.info(f"   - 图片数量  : {len(image_urls)}")
+                    logger.info(f"{'='*70}\n")
                     return {
                         "success": True,
                         "history_id": history_id,
@@ -690,10 +715,15 @@ class JimengAPIClient:
                     }
             
             # 回退到history_id
+            logger.info(f"  → 尝试通过 History ID 获取结果...")
             image_urls = self._get_images_by_history_id(history_id)
             if image_urls:
-                elapsed_time = (attempt + 1) * check_interval
-                logger.info(f"[Jimeng] 图片生成成功！耗时: {elapsed_time}秒，图片数量: {len(image_urls)}")
+                logger.info(f"\n{'='*70}")
+                logger.info(f"✅ [Jimeng] 图片生成成功！")
+                logger.info(f"   - 获取方式  : History ID")
+                logger.info(f"   - 总耗时    : {elapsed_time}秒")
+                logger.info(f"   - 图片数量  : {len(image_urls)}")
+                logger.info(f"{'='*70}\n")
                 return {
                     "success": True,
                     "history_id": history_id,
@@ -701,15 +731,18 @@ class JimengAPIClient:
                     "urls": image_urls
                 }
             
-            # 每30秒输出进度
-            if (attempt + 1) % 6 == 0:
-                elapsed_time = (attempt + 1) * check_interval
-                logger.info(f"[Jimeng] 图片生成中... 已等待 {elapsed_time}秒/{max_wait_time}秒")
+            # 显示正在处理
+            logger.info(f"  🕐 图片仍在生成中... 请稍候")
         
-        logger.error(f"[Jimeng] 图片生成超时，已等待 {max_wait_time}秒")
+        total_time = int(time.time() - start_time)
+        logger.error(f"\n{'='*70}")
+        logger.error(f"❌ [Jimeng] 图片生成超时！")
+        logger.error(f"   - 总耗时  : {total_time}秒")
+        logger.error(f"   - 最大等待: {max_wait_time}秒")
+        logger.error(f"{'='*70}\n")
         return {
             "success": False,
-            "error": f"生成超时，已等待{max_wait_time}秒"
+            "error": f"生成超时，已等待{total_time}秒"
         }
     
     def _get_images_by_history_id(self, history_id: str) -> Optional[List[str]]:
