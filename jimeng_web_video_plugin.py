@@ -380,11 +380,15 @@ class JimengWebVideoPlugin:
             if not upload_button:
                 raise Exception("未找到上传按钮")
             
-            # 上传所有图片（多文件上传）
+            # 逐个上传文件（即梦网页只支持单文件上传）
             file_input = self.page.query_selector('input[type="file"]')
-            file_input.set_input_files(image_paths)
             
-            logger.info(f"已上传 {len(image_paths)} 张图片")
+            for idx, image_path in enumerate(image_paths, 1):
+                logger.info(f"正在上传第 {idx}/{len(image_paths)} 张图片: {os.path.basename(image_path)}")
+                file_input.set_input_files(image_path)
+                self.page.wait_for_timeout(2000)  # 等待每张图片上传完成
+            
+            logger.info(f"已成功上传 {len(image_paths)} 张图片")
             time.sleep(5)  # 等待上传完成
             
             # 等待图片上传完成后，查找页面上的图片元素

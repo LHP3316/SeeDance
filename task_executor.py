@@ -658,6 +658,7 @@ class TaskExecutor:
     def _execute_video_task_web_plugin(self, task) -> Dict:
         """
         使用 Web 插件（浏览器自动化）执行视频任务
+        支持：文生视频（无图片）和图生视频（有图片）
         
         Args:
             task: 任务对象
@@ -677,7 +678,8 @@ class TaskExecutor:
         }
         
         try:
-            # 1. 获取图片路径
+            # 1. 获取图片路径（可能为空）
+            local_image_paths = []
             session = self.Session()
             try:
                 from sqlalchemy import text
@@ -695,38 +697,35 @@ class TaskExecutor:
             finally:
                 session.close()
             
-            if not rows:
-                result["error"] = "未找到图片素材"
-                logger.error(result["error"])
-                return result
-            
-            logger.info(f"获取到 {len(rows)} 个图片素材")
-            
-            # 2. 下载图片到本地
-            local_image_paths = []
-            
-            for row in rows:
-                image_id = row[0]
-                reference_name = row[1]
-                file_url = row[2]
+            # 判断是文生视频还是图生视频
+            if rows:
+                logger.info(f"获取到 {len(rows)} 个图片素材（图生视频）")
                 
-                logger.info(f"下载图片素材: {reference_name} ({file_url})")
+                # 下载图片到本地
+                for row in rows:
+                    image_id = row[0]
+                    reference_name = row[1]
+                    file_url = row[2]
+                    
+                    logger.info(f"下载图片素材: {reference_name} ({file_url})")
+                    
+                    local_path = self._download_material_image(file_url, reference_name)
+                    if local_path:
+                        local_image_paths.append(local_path)
+                        logger.info(f"  ✓ 图片已下载: {local_path}")
+                    else:
+                        logger.error(f"  ✗ 图片下载失败: {reference_name}")
                 
-                local_path = self._download_material_image(file_url, reference_name)
-                if local_path:
-                    local_image_paths.append(local_path)
-                    logger.info(f"  ✓ 图片已下载: {local_path}")
-                else:
-                    logger.error(f"  ✗ 图片下载失败: {reference_name}")
+                if len(local_image_paths) != len(rows):
+                    result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
+                    logger.error(result["error"])
+                    return result
+                
+                logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
+            else:
+                logger.info("未检测到图片素材（文生视频模式）")
             
-            if len(local_image_paths) != len(rows):
-                result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
-                logger.error(result["error"])
-                return result
-            
-            logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
-            
-            # 3. 解析任务参数
+            # 2. 解析任务参数
             import json
             params = {}
             if task.params:
@@ -737,31 +736,39 @@ class TaskExecutor:
             
             # 获取插件配置
             browser_exe = params.get('browser_exe')
-            model = params.get('model', 'seedance-2.0')
-            generation_mode = params.get('generation_mode', 'omni_reference')
+            
+            # 从 task 对象获取视频参数（这些字段已存入数据库）
+            model = task.model  # 直接使用任务配置的模型
+            ratio = task.ratio  # 直接使用任务配置的比例
+            duration = task.duration  # 直接使用任务配置的时长
+            generation_mode = params.get('generation_mode', 'text_to_video')  # 文生视频默认模式
             timeout = params.get('timeout', 900)
             
-            # 4. 初始化插件
+            # 3. 初始化插件（复用已创建的实例）
             if not self.web_plugin:
+                logger.info("初始化 Web 插件实例...")
                 self.web_plugin = JimengWebVideoPlugin(
                     browser_exe=browser_exe,
                     headless=False  # 显示浏览器，方便调试
                 )
             
-            # 5. 调用插件生成视频
+            # 4. 调用插件生成视频（参数从数据库中读取）
             logger.info(f"调用 Web 插件生成视频...")
-            logger.info(f"  - 模型: {model}")
-            logger.info(f"  - 比例: {task.ratio}")
-            logger.info(f"  - 时长: {task.duration}秒")
+            logger.info(f"  - 任务类型: {'图生视频' if local_image_paths else '文生视频'}")
+            logger.info(f"  - 模型: {model} (从数据库读取)")
+            logger.info(f"  - 比例: {ratio} (从数据库读取)")
+            logger.info(f"  - 时长: {duration}秒 (从数据库读取)")
             logger.info(f"  - 生成模式: {generation_mode}")
             logger.info(f"  - 超时: {timeout}秒")
+            logger.info(f"  - 图片数量: {len(local_image_paths)}")
+            logger.info(f"  - 提示词: {task.prompt}")
             
             plugin_result = self.web_plugin.generate_video(
-                image_paths=local_image_paths,
+                image_paths=local_image_paths if local_image_paths else None,  # 文生视频传None
                 prompt=task.prompt,
                 model=model,
-                ratio=task.ratio,
-                duration=task.duration or 5,
+                ratio=ratio,
+                duration=duration or 5,
                 generation_mode=generation_mode,
                 timeout=timeout
             )
