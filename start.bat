@@ -1,44 +1,71 @@
 @echo off
-REM ========================================
-REM SeeDance 后端服务启动脚本 (Windows)
-REM ========================================
+setlocal EnableExtensions EnableDelayedExpansion
+chcp 65001 >nul
 
-echo ========================================
-echo   SeeDance Backend Startup
-echo ========================================
-echo.
+set "ROOT=%~dp0"
+set "BACKEND_DIR=%ROOT%backend"
+set "FRONTEND_DIR=%ROOT%frontend"
+set "BACKEND_PID=%ROOT%backend.pid"
+set "FRONTEND_PID=%ROOT%frontend.pid"
 
-REM 检查 Python 是否安装
-python --version >nul 2>&1
+echo ==============================
+echo SeeDance 启动脚本
+echo ==============================
+
+where python >nul 2>nul
 if errorlevel 1 (
-    echo [错误] 未找到 Python，请先安装 Python 或 Miniconda
-    pause
-    exit /b 1
+  echo [错误] 未检测到 Python，请先安装或激活环境。
+  exit /b 1
 )
 
-REM 进入 backend 目录
-cd /d "%~dp0backend"
+call :ensure_not_running "后端" "%BACKEND_PID%"
+if errorlevel 1 exit /b 1
 
-REM 检查虚拟环境
-if exist "..\venv\Scripts\activate.bat" (
-    echo 激活虚拟环境...
-    call ..\venv\Scripts\activate.bat
-) else if exist "%USERPROFILE%\miniconda3\Scripts\activate.bat" (
-    echo 激活 Conda 环境...
-    call "%USERPROFILE%\miniconda3\Scripts\activate.bat" seedance
-) else if exist "%USERPROFILE%\anaconda3\Scripts\activate.bat" (
-    echo 激活 Conda 环境...
-    call "%USERPROFILE%\anaconda3\Scripts\activate.bat" seedance
+for /f %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath 'python' -ArgumentList '-m','uvicorn','main:app','--host','0.0.0.0','--port','8000' -WorkingDirectory '%BACKEND_DIR%' -WindowStyle Hidden -PassThru; $p.Id"') do set "BID=%%i"
+if not defined BID (
+  echo [错误] 后端启动失败。
+  exit /b 1
+)
+> "%BACKEND_PID%" echo !BID!
+echo [成功] 后端已启动，PID=!BID!
+
+if exist "%FRONTEND_DIR%\package.json" (
+  where npm >nul 2>nul
+  if errorlevel 1 (
+    echo [警告] 未检测到 npm，前端未启动。请先安装 Node.js。
+  ) else (
+    call :ensure_not_running "前端" "%FRONTEND_PID%"
+    if errorlevel 1 exit /b 1
+    for /f %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','npm run dev' -WorkingDirectory '%FRONTEND_DIR%' -WindowStyle Hidden -PassThru; $p.Id"') do set "FID=%%i"
+    if defined FID (
+      > "%FRONTEND_PID%" echo !FID!
+      echo [成功] 前端已启动，PID=!FID!
+    ) else (
+      echo [错误] 前端启动失败。
+      exit /b 1
+    )
+  )
+) else (
+  echo [提示] 未检测到 frontend\package.json，已跳过前端。
 )
 
-echo.
-echo 启动后端服务...
-echo URL: http://localhost:8000
-echo API 文档: http://localhost:8000/docs
-echo ========================================
-echo.
+echo [完成] 启动命令执行结束。
+exit /b 0
 
-REM 启动后端
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-pause
+:ensure_not_running
+set "SVC=%~1"
+set "PIDFILE=%~2"
+if not exist "%PIDFILE%" exit /b 0
+set "PID="
+set /p PID=<"%PIDFILE%"
+if not defined PID (
+  del /q "%PIDFILE%" >nul 2>nul
+  exit /b 0
+)
+powershell -NoProfile -Command "if (Get-Process -Id !PID! -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
+if errorlevel 1 (
+  del /q "%PIDFILE%" >nul 2>nul
+  exit /b 0
+)
+echo [提示] %SVC%已在运行，PID=!PID!
+exit /b 1
