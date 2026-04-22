@@ -4,13 +4,29 @@
 
 ### 1.1 安装 Miniconda（推荐）
 
-1. 下载 Miniconda Windows 版本：
-   - 地址：https://docs.conda.io/en/latest/miniconda.html
-   - 下载：`Miniconda3 Windows 64-bit`
+**使用 PowerShell 一键下载安装：**
 
-2. 运行安装程序，按提示安装
-   - 建议勾选"Add to PATH"
-   - 或使用 Anaconda Prompt
+```powershell
+# 下载 Miniconda 安装器（使用清华镜像，速度更快）
+Invoke-WebRequest -Uri "https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-latest-Windows-x86_64.exe" -OutFile "$env:TEMP\Miniconda3.exe"
+
+# 静默安装（自动配置环境变量）
+Start-Process -FilePath "$env:TEMP\Miniconda3.exe" -ArgumentList "/InstallationType=JustMe", "/RegisterPython=1", "/AddToPath=1", "/S", "/D=$env:USERPROFILE\miniconda3" -Wait
+
+# 清理安装包
+Remove-Item "$env:TEMP\Miniconda3.exe" -Force
+
+# 刷新环境变量（或重启 PowerShell）
+$env:Path += ";$env:USERPROFILE\miniconda3;$env:USERPROFILE\miniconda3\Scripts;$env:USERPROFILE\miniconda3\Library\bin"
+
+# 验证安装
+conda --version
+```
+
+**或手动下载（如果命令行失败）：**
+- 地址：https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/
+- 下载：`Miniconda3-latest-Windows-x86_64.exe`
+- 双击安装，勾选"Add to PATH"
 
 ### 1.2 或使用 Python 官方安装包
 
@@ -31,6 +47,40 @@ conda activate seedance
 # 验证
 python --version
 ```
+
+### 2.1 安装 Git
+
+**使用 PowerShell 下载安装：**
+
+```powershell
+# 下载 Git for Windows（使用 GitHub 官方）
+Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/v2.54.0.windows.1/Git-2.54.0-64-bit.exe" -OutFile "$env:TEMP\Git-Setup.exe"
+
+# 或使用国内镜像（Gitee）
+# Invoke-WebRequest -Uri "https://registry.npmmirror.com/-/binary/git-for-windows/v2.54.0.windows.1/Git-2.54.0-64-bit.exe" -OutFile "$env:TEMP\Git-Setup.exe"
+
+# 静默安装
+Start-Process -FilePath "$env:TEMP\Git-Setup.exe" -ArgumentList "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS" -Wait
+
+# 清理安装包
+Remove-Item "$env:TEMP\Git-Setup.exe" -Force
+
+# 刷新环境变量（或重启 PowerShell）
+$env:Path += ";C:\Program Files\Git\cmd"
+
+# 验证安装
+git --version
+```
+
+**或使用 winget（如果可用）：**
+```powershell
+winget install Git.Git
+```
+
+**或手动下载：**
+- 地址：https://git-scm.com/download/win
+- 下载：`Git for Windows/x64 Setup`
+- 双击安装，一路 Next 即可
 
 ## 3. 克隆项目
 
@@ -84,11 +134,26 @@ plugin = JimengWebVideoPlugin(
 
 ## 6. 安装 MySQL 数据库
 
-### 6.1 下载 MySQL Installer
+### 6.1 使用 PowerShell 下载 MySQL Installer
 
+```powershell
+# 下载 MySQL Installer（在线版本，体积小）
+Invoke-WebRequest -Uri "https://dev.mysql.com/get/Downloads/MySQLInstaller/mysql-installer-web-community-8.0.41.0.msi" -OutFile "$env:TEMP\mysql-installer-web.msi"
+
+# 或下载完整离线版本（约 300MB）
+# Invoke-WebRequest -Uri "https://dev.mysql.com/get/Downloads/MySQLInstaller/mysql-installer-community-8.0.41.0.msi" -OutFile "$env:TEMP\mysql-installer-community.msi"
+
+# 运行安装程序
+Start-Process -FilePath "$env:TEMP\mysql-installer-web.msi" -Wait
+
+# 清理安装包
+Remove-Item "$env:TEMP\mysql-installer-web.msi" -Force
+```
+
+**或手动下载：**
 1. 访问：https://dev.mysql.com/downloads/installer/
-2. 下载 `mysql-installer-community`（约 300MB）
-3. 选择 `mysql-installer-web-community`（在线安装，体积小）
+2. 下载 `mysql-installer-web-community`（在线安装，体积小）
+3. 或下载 `mysql-installer-community`（离线安装，约 300MB）
 
 ### 6.2 安装步骤
 
@@ -219,19 +284,42 @@ New-NetFirewallRule -DisplayName "SeeDance Backend" -Direction Inbound -LocalPor
 
 ### 12.2 使用 NSSM（推荐）
 
+**下载 NSSM：**
+
 ```powershell
 # 下载 NSSM
-# https://nssm.cc/download
+Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm-2.24.zip"
 
-# 安装服务
-nssm install SeeDance-Backend
-nssm set SeeDance-Backend Application "C:\Path\To\Miniconda3\envs\seedance\python.exe"
-nssm set SeeDance-Backend ApplicationParameters "main.py"
-nssm set SeeDance-Backend AppDirectory "d:\Project\seedance\backend"
-nssm set SeeDance-Backend DisplayName "SeeDance Backend Service"
+# 解压到项目目录
+Expand-Archive -Path "$env:TEMP\nssm-2.24.zip" -DestinationPath "d:\Project\seedance\tools" -Force
+
+# 清理安装包
+Remove-Item "$env:TEMP\nssm-2.24.zip" -Force
+
+# NSSM 路径：d:\Project\seedance\tools\nssm-2.24\win64\nssm.exe
+```
+
+**安装服务：**
+
+```powershell
+# 进入 NSSM 目录
+cd d:\Project\seedance\tools\nssm-2.24\win64
+
+# 安装后端服务（会弹出配置窗口）
+.\nssm.exe install SeeDance-Backend
+
+# 在弹出的 GUI 中配置：
+# Application -> Path: $env:USERPROFILE\miniconda3\envs\seedance\python.exe
+# Application -> Arguments: -m uvicorn main:app --host 0.0.0.0 --port 8000
+# Application -> Startup directory: d:\Project\seedance\backend
+# Details -> Display name: SeeDance Backend Service
+# Log on -> 选择 Local System account
 
 # 启动服务
-nssm start SeeDance-Backend
+.\nssm.exe start SeeDance-Backend
+
+# 查看服务状态
+.\nssm.exe status SeeDance-Backend
 ```
 
 ## 13. 常见问题
@@ -242,8 +330,8 @@ nssm start SeeDance-Backend
 # 清理缓存重试
 playwright install --force chromium
 
-# 或使用国内镜像
-set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+# 或使用国内镜像下载浏览器
+$env:PLAYWRIGHT_DOWNLOAD_HOST="https://npmmirror.com/mirrors/playwright"
 playwright install chromium
 ```
 
