@@ -56,16 +56,17 @@ if exist "%BACKEND_PID_FILE%" (
 
 echo [信息] 正在启动后端...
 
-REM 先激活 conda 环境（如果存在）
-if exist "%USERPROFILE%\miniconda3\Scripts\activate.bat" (
-  call "%USERPROFILE%\miniconda3\Scripts\activate.bat" seedance
-) else if exist "%USERPROFILE%\anaconda3\Scripts\activate.bat" (
-  call "%USERPROFILE%\anaconda3\Scripts\activate.bat" seedance
+REM 确定 Python 可执行文件路径
+set "PYTHON_EXE=python"
+if exist "%USERPROFILE%\miniconda3\envs\seedance\python.exe" (
+  set "PYTHON_EXE=%USERPROFILE%\miniconda3\envs\seedance\python.exe"
+) else if exist "%USERPROFILE%\anaconda3\envs\seedance\python.exe" (
+  set "PYTHON_EXE=%USERPROFILE%\anaconda3\envs\seedance\python.exe"
 )
 
 REM 使用 start /B 在后台启动，先cd到backend目录
 pushd "%BACKEND_DIR%"
-start /B python -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
+start /B "%PYTHON_EXE%" -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
 popd
 
 REM 等待 3 秒让进程启动
@@ -121,11 +122,10 @@ if errorlevel 1 (
 
 echo [信息] 正在启动前端...
 
-REM 先激活 conda 环境（如果存在）
-if exist "%USERPROFILE%\miniconda3\Scripts\activate.bat" (
-  call "%USERPROFILE%\miniconda3\Scripts\activate.bat" seedance
-) else if exist "%USERPROFILE%\anaconda3\Scripts\activate.bat" (
-  call "%USERPROFILE%\anaconda3\Scripts\activate.bat" seedance
+REM 确定 Node.js 可执行文件路径（使用系统 PATH 中的 npm）
+set "NODE_EXE=node"
+if exist "%USERPROFILE%\miniconda3\envs\seedance\node.exe" (
+  set "NODE_EXE=%USERPROFILE%\miniconda3\envs\seedance\node.exe"
 )
 
 REM 使用 start /B 在后台启动
