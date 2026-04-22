@@ -30,6 +30,26 @@ conda --version
 
 ### 1.2 或使用 Python 官方安装包
 
+**使用 PowerShell 下载安装：**
+
+```powershell
+# 下载 Python 3.12 安装器（官方）
+Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe" -OutFile "$env:TEMP\python-3.12.8.exe"
+
+# 静默安装（自动添加到 PATH）
+Start-Process -FilePath "$env:TEMP\python-3.12.8.exe" -ArgumentList "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_test=0" -Wait
+
+# 清理安装包
+Remove-Item "$env:TEMP\python-3.12.8.exe" -Force
+
+# 刷新环境变量（或重启 PowerShell）
+$env:Path += ";$env:LOCALAPPDATA\Programs\Python\Python312;$env:LOCALAPPDATA\Programs\Python\Python312\Scripts"
+
+# 验证安装
+python --version
+```
+
+**或手动下载：**
 - 下载：https://www.python.org/downloads/
 - 安装时勾选"Add Python to PATH"
 
