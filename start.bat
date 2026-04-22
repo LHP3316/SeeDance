@@ -69,17 +69,8 @@ pushd "%BACKEND_DIR%"
 start /B "" "%PYTHON_EXE%" -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
 popd
 
-REM 等待 5 秒让服务启动
-timeout /t 5 /nobreak >nul
-
-REM 检查端口 8000 是否监听
-netstat -ano | findstr ":8000 " | findstr "LISTENING" >nul 2>nul
-if not errorlevel 1 (
-  echo [成功] 后端已启动，监听端口 8000
-) else (
-  echo [错误] 后端启动失败，请检查日志: %BACKEND_LOG%
-  exit /b 1
-)
+echo [信息] 后端启动命令已执行，正在后台运行...
+echo [提示] 请等待 5-10 秒后访问 http://localhost:8000/docs
 exit /b 0
 
 :start_frontend
@@ -116,15 +107,6 @@ pushd "%FRONTEND_DIR%"
 start /B cmd /c "npm run dev >>"%FRONTEND_LOG%" 2>&1"
 popd
 
-REM 等待 5 秒让服务启动
-timeout /t 5 /nobreak >nul
-
-REM 检查端口 5173 是否监听
-netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul 2>nul
-if not errorlevel 1 (
-  echo [成功] 前端已启动，监听端口 5173
-) else (
-  echo [错误] 前端启动失败，请检查日志: %FRONTEND_LOG%
-  exit /b 1
-)
+echo [信息] 前端启动命令已执行，正在后台运行...
+echo [提示] 请等待 5-10 秒后访问 http://localhost:5173
 exit /b 0
