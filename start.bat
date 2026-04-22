@@ -56,6 +56,13 @@ if exist "%BACKEND_PID_FILE%" (
 
 echo [信息] 正在启动后端...
 
+REM 先激活 conda 环境（如果存在）
+if exist "%USERPROFILE%\miniconda3\Scripts\activate.bat" (
+  call "%USERPROFILE%\miniconda3\Scripts\activate.bat" seedance
+) else if exist "%USERPROFILE%\anaconda3\Scripts\activate.bat" (
+  call "%USERPROFILE%\anaconda3\Scripts\activate.bat" seedance
+)
+
 REM 使用 start /B 在后台启动，先cd到backend目录
 pushd "%BACKEND_DIR%"
 start /B python -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
@@ -113,6 +120,13 @@ if errorlevel 1 (
 )
 
 echo [信息] 正在启动前端...
+
+REM 先激活 conda 环境（如果存在）
+if exist "%USERPROFILE%\miniconda3\Scripts\activate.bat" (
+  call "%USERPROFILE%\miniconda3\Scripts\activate.bat" seedance
+) else if exist "%USERPROFILE%\anaconda3\Scripts\activate.bat" (
+  call "%USERPROFILE%\anaconda3\Scripts\activate.bat" seedance
+)
 
 REM 使用 start /B 在后台启动
 pushd "%FRONTEND_DIR%"
