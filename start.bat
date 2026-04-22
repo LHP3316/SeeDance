@@ -9,10 +9,8 @@ set "LOG_DIR=%ROOT%logs"
 set "BACKEND_PID_FILE=%ROOT%backend.pid"
 set "FRONTEND_PID_FILE=%ROOT%frontend.pid"
 
-set "BACKEND_OUT=%LOG_DIR%\backend.out.log"
-set "BACKEND_ERR=%LOG_DIR%\backend.err.log"
-set "FRONTEND_OUT=%LOG_DIR%\frontend.out.log"
-set "FRONTEND_ERR=%LOG_DIR%\frontend.err.log"
+set "BACKEND_LOG=%LOG_DIR%\backend.log"
+set "FRONTEND_LOG=%LOG_DIR%\frontend.log"
 
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
@@ -26,120 +24,117 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call :ensure_service_state "backend" "%BACKEND_PID_FILE%" 8000
-set "RC=%errorlevel%"
-if "%RC%"=="1" exit /b 1
-if "%RC%"=="2" goto backend_ready
+REM 启动后端
+call :start_backend
+if errorlevel 1 exit /b 1
 
-for /f %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath 'python' -ArgumentList '-m','uvicorn','main:app','--host','0.0.0.0','--port','8000' -WorkingDirectory '%BACKEND_DIR%' -RedirectStandardOutput '%BACKEND_OUT%' -RedirectStandardError '%BACKEND_ERR%' -WindowStyle Hidden -PassThru; $p.Id"') do set "BID=%%i"
-if not defined BID (
-  echo [错误] 启动后端进程失败。
-  exit /b 1
-)
-> "%BACKEND_PID_FILE%" echo !BID!
-
-call :wait_port 8000 25
-if errorlevel 1 (
-  echo [错误] 后端进程已启动但端口 8000 未监听。
-  echo [提示] 检查日志：
-  echo        %BACKEND_OUT%
-  echo        %BACKEND_ERR%
-  del /q "%BACKEND_PID_FILE%" >nul 2>nul
-  exit /b 1
-)
-
-:backend_ready
-if not defined BID set "BID=N/A"
-echo [成功] 后端已监听端口 8000。进程ID: !BID!
-
+REM 启动前端（如果存在）
 if exist "%FRONTEND_DIR%\package.json" (
-  where npm >nul 2>nul
-  if errorlevel 1 (
-    echo [警告] 未找到 npm。跳过前端启动。
-    goto done
+  call :start_frontend
+) else (
+  echo [信息] 未找到 frontend\package.json，跳过前端启动。
+)
+
+echo [完成] 启动命令执行完毕。
+echo [提示] 使用 status 命令检查运行状态。
+exit /b 0
+
+:start_backend
+REM 检查是否已经在运行
+if exist "%BACKEND_PID_FILE%" (
+  set "PID="
+  set /p PID<"%BACKEND_PID_FILE%"
+  if defined PID (
+    tasklist /FI "PID eq !PID!" 2>nul | findstr "!PID!" >nul 2>nul
+    if not errorlevel 1 (
+      echo [信息] 后端已在运行 (进程ID: !PID!)
+      exit /b 1
+    )
   )
+  del /q "%BACKEND_PID_FILE%" >nul 2>nul
+)
 
-  call :ensure_service_state "frontend" "%FRONTEND_PID_FILE%" 5173
-  set "RC=%errorlevel%"
-  if "%RC%"=="1" exit /b 1
-  if "%RC%"=="2" goto frontend_ready
+echo [信息] 正在启动后端...
 
-  for /f %%i in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','npm run dev' -WorkingDirectory '%FRONTEND_DIR%' -RedirectStandardOutput '%FRONTEND_OUT%' -RedirectStandardError '%FRONTEND_ERR%' -WindowStyle Hidden -PassThru; $p.Id"') do set "FID=%%i"
-  if not defined FID (
-    echo [错误] 启动前端进程失败。
+REM 使用 start /B 在后台启动
+start /B cmd /c "cd /d "%BACKEND_DIR%" && python -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1"
+
+REM 获取最后启动的进程 PID
+for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO TABLE /NH ^| findstr /R /C:"python.exe"') do (
+  set "LAST_PID=%%i"
+)
+
+REM 保存 PID
+if defined LAST_PID (
+  >"%BACKEND_PID_FILE%" echo !LAST_PID!
+)
+
+REM 等待 2 秒让服务启动
+timeout /t 2 /nobreak >nul
+
+REM 检查进程是否还在运行
+if defined LAST_PID (
+  tasklist /FI "PID eq !LAST_PID!" 2>nul | findstr "!LAST_PID!" >nul 2>nul
+  if errorlevel 1 (
+    echo [错误] 后端启动失败，请检查日志: %BACKEND_LOG%
+    del /q "%BACKEND_PID_FILE%" >nul 2>nul
     exit /b 1
   )
-  > "%FRONTEND_PID_FILE%" echo !FID!
+  echo [成功] 后端已启动 (进程ID: !LAST_PID!)
+) else (
+  echo [警告] 无法获取后端进程ID，但启动命令已执行。
+)
+exit /b 0
 
-  call :wait_port 5173 35
+:start_frontend
+REM 检查是否已经在运行
+if exist "%FRONTEND_PID_FILE%" (
+  set "PID="
+  set /p PID<"%FRONTEND_PID_FILE%"
+  if defined PID (
+    tasklist /FI "PID eq !PID!" 2>nul | findstr "!PID!" >nul 2>nul
+    if not errorlevel 1 (
+      echo [信息] 前端已在运行 (进程ID: !PID!)
+      exit /b 1
+    )
+  )
+  del /q "%FRONTEND_PID_FILE%" >nul 2>nul
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo [错误] 未找到 npm。
+  exit /b 1
+)
+
+echo [信息] 正在启动前端...
+
+REM 使用 start /B 在后台启动
+start /B cmd /c "cd /d "%FRONTEND_DIR%" && npm run dev >>"%FRONTEND_LOG%" 2>&1"
+
+REM 获取最后启动的 node 进程 PID
+for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq node.exe" /FO TABLE /NH ^| findstr /R /C:"node.exe"') do (
+  set "LAST_PID=%%i"
+)
+
+REM 保存 PID
+if defined LAST_PID (
+  >"%FRONTEND_PID_FILE%" echo !LAST_PID!
+)
+
+REM 等待 2 秒让服务启动
+timeout /t 2 /nobreak >nul
+
+REM 检查进程是否还在运行
+if defined LAST_PID (
+  tasklist /FI "PID eq !LAST_PID!" 2>nul | findstr "!LAST_PID!" >nul 2>nul
   if errorlevel 1 (
-    echo [错误] 前端进程已启动但端口 5173 未监听。
-    echo [提示] 检查日志：
-    echo        %FRONTEND_OUT%
-    echo        %FRONTEND_ERR%
+    echo [错误] 前端启动失败，请检查日志: %FRONTEND_LOG%
     del /q "%FRONTEND_PID_FILE%" >nul 2>nul
     exit /b 1
   )
-
-  :frontend_ready
-  if not defined FID set "FID=N/A"
-  echo [成功] 前端已监听端口 5173。进程ID: !FID!
+  echo [成功] 前端已启动 (进程ID: !LAST_PID!)
 ) else (
-  echo [信息] 未找到 frontend\package.json。跳过前端启动。
-)
-
-:done
-echo [完成] 启动命令执行完毕。
-exit /b 0
-
-:ensure_service_state
-set "SVC=%~1"
-set "PID_FILE=%~2"
-set "PORT=%~3"
-
-call :is_port_listening %PORT%
-if not errorlevel 1 (
-  echo [信息] %SVC% 已在端口 %PORT% 上监听。
-  exit /b 2
-)
-
-if not exist "%PID_FILE%" exit /b 0
-
-set "OLD_PID="
-set /p OLD_PID<"%PID_FILE%"
-if not defined OLD_PID (
-  del /q "%PID_FILE%" >nul 2>nul
-  exit /b 0
-)
-
-powershell -NoProfile -Command "if (Get-Process -Id !OLD_PID! -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
-if errorlevel 1 (
-  del /q "%PID_FILE%" >nul 2>nul
-  exit /b 0
-)
-
-echo [警告] %SVC% 进程 !OLD_PID! 仍在运行但端口 %PORT% 未监听。已删除过期的 pid 文件。
-del /q "%PID_FILE%" >nul 2>nul
-exit /b 0
-
-:wait_port
-set "PORT=%~1"
-set "MAX_TRIES=%~2"
-if not defined MAX_TRIES set "MAX_TRIES=20"
-set /a TRY=0
-
-:wait_loop
-set /a TRY+=1
-call :is_port_listening %PORT%
-if not errorlevel 1 exit /b 0
-if !TRY! geq !MAX_TRIES! exit /b 1
-powershell -NoProfile -Command "Start-Sleep -Seconds 1" >nul 2>nul
-goto :wait_loop
-
-:is_port_listening
-set "PORT=%~1"
-netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >nul 2>nul
-if errorlevel 1 (
-  exit /b 1
+  echo [警告] 无法获取前端进程ID，但启动命令已执行。
 )
 exit /b 0
