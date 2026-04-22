@@ -64,9 +64,9 @@ if exist "%USERPROFILE%\miniconda3\envs\seedance\python.exe" (
   set "PYTHON_EXE=%USERPROFILE%\anaconda3\envs\seedance\python.exe"
 )
 
-REM 使用 start /B 在后台启动，先cd到backend目录
+REM 使用 start /B 在后台启动（第一个空字符串是窗口标题）
 pushd "%BACKEND_DIR%"
-start /B "%PYTHON_EXE%" -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
+start /B "" "%PYTHON_EXE%" -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
 popd
 
 REM 等待 3 秒让进程启动
