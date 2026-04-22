@@ -30,7 +30,7 @@ if not exist "%PID_FILE%" (
 )
 
 set "PID="
-set /p PID<"%PID_FILE%"
+set /p PID=<"%PID_FILE%"
 if not defined PID (
   del /q "%PID_FILE%" >nul 2>nul
   echo [信息] %NAME% PID 文件为空，已清理。

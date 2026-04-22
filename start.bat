@@ -56,11 +56,16 @@ if exist "%BACKEND_PID_FILE%" (
 
 echo [信息] 正在启动后端...
 
-REM 使用 start /B 在后台启动
-start /B cmd /c "cd /d "%BACKEND_DIR%" && python -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1"
+REM 使用 start /B 在后台启动，先cd到backend目录
+pushd "%BACKEND_DIR%"
+start /B python -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
+popd
 
-REM 获取最后启动的进程 PID
-for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO TABLE /NH ^| findstr /R /C:"python.exe"') do (
+REM 等待 3 秒让进程启动
+timeout /t 3 /nobreak >nul
+
+REM 获取最新启动的 python 进程 PID（通过 WMIC）
+for /f "tokens=2 delims==" %%i in ('wmic process where "name='python.exe' and commandline like '%%uvicorn%%'" get ProcessId /value 2^>nul ^| findstr "ProcessId"') do (
   set "LAST_PID=%%i"
 )
 
@@ -110,10 +115,15 @@ if errorlevel 1 (
 echo [信息] 正在启动前端...
 
 REM 使用 start /B 在后台启动
-start /B cmd /c "cd /d "%FRONTEND_DIR%" && npm run dev >>"%FRONTEND_LOG%" 2>&1"
+pushd "%FRONTEND_DIR%"
+start /B cmd /c "npm run dev >>"%FRONTEND_LOG%" 2>&1"
+popd
 
-REM 获取最后启动的 node 进程 PID
-for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq node.exe" /FO TABLE /NH ^| findstr /R /C:"node.exe"') do (
+REM 等待 3 秒让进程启动
+timeout /t 3 /nobreak >nul
+
+REM 获取最新启动的 node 进程 PID（通过 WMIC）
+for /f "tokens=2 delims==" %%i in ('wmic process where "name='node.exe' and commandline like '%%vite%%'" get ProcessId /value 2^>nul ^| findstr "ProcessId"') do (
   set "LAST_PID=%%i"
 )
 
