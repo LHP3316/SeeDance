@@ -69,33 +69,16 @@ pushd "%BACKEND_DIR%"
 start /B "" "%PYTHON_EXE%" -m uvicorn main:app --host 0.0.0.0 --port 8000 >>"%BACKEND_LOG%" 2>&1
 popd
 
-REM 等待 3 秒让进程启动
-timeout /t 3 /nobreak >nul
+REM 等待 5 秒让服务启动
+timeout /t 5 /nobreak >nul
 
-REM 获取最新启动的 python 进程 PID（通过 WMIC）
-for /f "tokens=2 delims==" %%i in ('wmic process where "name='python.exe' and commandline like '%%uvicorn%%'" get ProcessId /value 2^>nul ^| findstr "ProcessId"') do (
-  set "LAST_PID=%%i"
-)
-
-REM 保存 PID
-if defined LAST_PID (
-  >"%BACKEND_PID_FILE%" echo !LAST_PID!
-)
-
-REM 等待 2 秒让服务启动
-timeout /t 2 /nobreak >nul
-
-REM 检查进程是否还在运行
-if defined LAST_PID (
-  tasklist /FI "PID eq !LAST_PID!" 2>nul | findstr "!LAST_PID!" >nul 2>nul
-  if errorlevel 1 (
-    echo [错误] 后端启动失败，请检查日志: %BACKEND_LOG%
-    del /q "%BACKEND_PID_FILE%" >nul 2>nul
-    exit /b 1
-  )
-  echo [成功] 后端已启动 (进程ID: !LAST_PID!)
+REM 检查端口 8000 是否监听
+netstat -ano | findstr ":8000 " | findstr "LISTENING" >nul 2>nul
+if not errorlevel 1 (
+  echo [成功] 后端已启动，监听端口 8000
 ) else (
-  echo [警告] 无法获取后端进程ID，但启动命令已执行。
+  echo [错误] 后端启动失败，请检查日志: %BACKEND_LOG%
+  exit /b 1
 )
 exit /b 0
 
@@ -133,32 +116,15 @@ pushd "%FRONTEND_DIR%"
 start /B cmd /c "npm run dev >>"%FRONTEND_LOG%" 2>&1"
 popd
 
-REM 等待 3 秒让进程启动
-timeout /t 3 /nobreak >nul
+REM 等待 5 秒让服务启动
+timeout /t 5 /nobreak >nul
 
-REM 获取最新启动的 node 进程 PID（通过 WMIC）
-for /f "tokens=2 delims==" %%i in ('wmic process where "name='node.exe' and commandline like '%%vite%%'" get ProcessId /value 2^>nul ^| findstr "ProcessId"') do (
-  set "LAST_PID=%%i"
-)
-
-REM 保存 PID
-if defined LAST_PID (
-  >"%FRONTEND_PID_FILE%" echo !LAST_PID!
-)
-
-REM 等待 2 秒让服务启动
-timeout /t 2 /nobreak >nul
-
-REM 检查进程是否还在运行
-if defined LAST_PID (
-  tasklist /FI "PID eq !LAST_PID!" 2>nul | findstr "!LAST_PID!" >nul 2>nul
-  if errorlevel 1 (
-    echo [错误] 前端启动失败，请检查日志: %FRONTEND_LOG%
-    del /q "%FRONTEND_PID_FILE%" >nul 2>nul
-    exit /b 1
-  )
-  echo [成功] 前端已启动 (进程ID: !LAST_PID!)
+REM 检查端口 5173 是否监听
+netstat -ano | findstr ":5173 " | findstr "LISTENING" >nul 2>nul
+if not errorlevel 1 (
+  echo [成功] 前端已启动，监听端口 5173
 ) else (
-  echo [警告] 无法获取前端进程ID，但启动命令已执行。
+  echo [错误] 前端启动失败，请检查日志: %FRONTEND_LOG%
+  exit /b 1
 )
 exit /b 0
