@@ -170,12 +170,15 @@ class TaskExecutor:
         self.web_plugin_enabled = False  # 是否启用插件模式
         
         # 输出目录 - 保存到项目根目录的 uploads/output
+        # task_executor.py 在项目根目录，所以 parent 就是根目录
         self.output_dir = Path(__file__).parent / "uploads" / "output"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info("=" * 60)
         logger.info("任务执行器初始化完成")
+        logger.info(f"脚本位置: {Path(__file__).parent}")
         logger.info(f"输出目录: {self.output_dir}")
+        logger.info(f"输出目录是否存在: {self.output_dir.exists()}")
         logger.info("=" * 60)
     
     def _get_session_id_from_db(self) -> Optional[str]:
@@ -789,6 +792,13 @@ class TaskExecutor:
                         db.close()
                 except Exception as e:
                     logger.error(f"  ✗ [立即保存] 保存 history_record_id 失败: {e}")
+            
+            # 打印图片路径信息，用于调试
+            if local_image_paths:
+                logger.info(f"准备上传的图片路径列表 ({len(local_image_paths)} 张):")
+                for i, path in enumerate(local_image_paths, 1):
+                    logger.info(f"  [{i}] {path}")
+                logger.info(f"output_dir: {self.output_dir}")
             
             plugin_result = self.web_plugin.generate_video(
                 image_paths=local_image_paths if local_image_paths else None,  # 文生视频传None
