@@ -1055,18 +1055,18 @@ class JimengWebVideoPlugin:
                     self.page.keyboard.type('，')
                     time.sleep(0.5)
             
-            # 5. 输入纯文本部分
-            if pure_text:
-                logger.info(f"输入纯文本: {pure_text}")
-                self.page.keyboard.type(pure_text)
-                time.sleep(15)
+            # # 5. 输入纯文本部分
+            # if pure_text:
+            #     logger.info(f"输入纯文本: {pure_text}")
+            #     self.page.keyboard.type(pure_text)
+            #     time.sleep(15)
             
-            logger.info("提示词输入完成")
+            # logger.info("提示词输入完成")
             
-            # 移除输入框焦点，避免后续操作意外触发提交
-            self.page.keyboard.press('Escape')
-            logger.info("✓ 已移除输入框焦点")
-            time.sleep(100000000000000000)
+            # # 移除输入框焦点，避免后续操作意外触发提交
+            # self.page.keyboard.press('Escape')
+            # logger.info("✓ 已移除输入框焦点")
+            # time.sleep(100000000000000000)
             
             # # 2. 选择模型（即梦使用的是自定义下拉选择器）
             # logger.info(f"选择模型: {model}")
