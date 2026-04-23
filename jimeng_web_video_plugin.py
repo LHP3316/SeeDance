@@ -1022,11 +1022,12 @@ class JimengWebVideoPlugin:
                 if idx > 0:
                     for _ in range(idx):
                         self.page.keyboard.press('ArrowDown')
-                        time.sleep(1)
+                        time.sleep(0.5)
                 
-                # 按回车确认选择
-                self.page.keyboard.press('Enter')
-                time.sleep(5)
+                # 选择图片：不使用回车键（避免意外触发提交），改用空格键或点击
+                # 尝试使用空格键选择
+                self.page.keyboard.press('Space')
+                time.sleep(3)
                 
                 # 输入描述
                 self.page.keyboard.type(desc)
