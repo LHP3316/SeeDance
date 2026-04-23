@@ -1024,9 +1024,10 @@ class JimengWebVideoPlugin:
                         self.page.keyboard.press('ArrowDown')
                         time.sleep(0.5)
                 
-                # 选择图片：不使用回车键（避免意外触发提交），改用空格键或点击
+                # 选择图片：使用回车键选择（必须）
                 self.page.keyboard.press('Enter')
                 time.sleep(3)
+                logger.info(f"✓ 已选择第 {idx+1} 张图片")
                 
                 # 输入描述
                 self.page.keyboard.type(desc)
@@ -1045,10 +1046,10 @@ class JimengWebVideoPlugin:
             
             logger.info("提示词输入完成")
             
-            # 移除输入框焦点，避免后续操作意外触发提交
-            self.page.keyboard.press('Escape')
-            logger.info("✓ 已移除输入框焦点")
-            time.sleep(100000000000000000)
+            # # 移除输入框焦点（暂时注释，测试自动提交）
+            # self.page.keyboard.press('Escape')
+            # logger.info("✓ 已移除输入框焦点")
+            # time.sleep(100000000000000000)
             
             # # 2. 选择模型（即梦使用的是自定义下拉选择器）
             # logger.info(f"选择模型: {model}")
