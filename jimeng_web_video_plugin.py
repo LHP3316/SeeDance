@@ -508,9 +508,26 @@ class JimengWebVideoPlugin:
             file_input = self.page.query_selector('input[type="file"]')
             
             for idx, image_path in enumerate(image_paths, 1):
-                logger.info(f"正在上传第 {idx}/{len(image_paths)} 张图片: {os.path.basename(image_path)}")
-                file_input.set_input_files(image_path)
-                self.page.wait_for_timeout(2000)  # 等待每张图片上传完成
+                # 转换为绝对路径（Windows下必须是绝对路径）
+                abs_path = os.path.abspath(image_path)
+                
+                # 检查文件是否存在
+                if not os.path.exists(abs_path):
+                    logger.error(f"✗ 文件不存在: {abs_path}")
+                    raise Exception(f"文件不存在: {abs_path}")
+                
+                file_size = os.path.getsize(abs_path)
+                logger.info(f"正在上传第 {idx}/{len(image_paths)} 张图片")
+                logger.info(f"  文件名: {os.path.basename(abs_path)}")
+                logger.info(f"  完整路径: {abs_path}")
+                logger.info(f"  文件大小: {file_size / 1024:.2f} KB")
+                
+                # 使用 Playwright 上传文件
+                file_input.set_input_files(abs_path)
+                
+                # 等待上传完成
+                self.page.wait_for_timeout(3000)
+                logger.info(f"  ✓ 第 {idx} 张图片上传完成")
             
             logger.info(f"已成功上传 {len(image_paths)} 张图片")
             time.sleep(5)  # 等待上传完成
@@ -533,6 +550,8 @@ class JimengWebVideoPlugin:
             
         except Exception as e:
             logger.error(f"上传图片失败: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     def _select_model(self, model_name: str):
