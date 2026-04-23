@@ -432,7 +432,9 @@ const currentTask = ref(null)
 // 图片任务相关
 const imageDialogVisible = ref(false)
 const imageFormRef = ref(null)
-const uploadUrl = 'http://localhost:8000/api/materials/upload'
+// 从环境变量获取API地址
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
+const uploadUrl = `${apiBaseUrl}/api/materials/upload`
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
 }
@@ -911,10 +913,12 @@ const getFileUrl = (filePath) => {
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
     return filePath
   }
+  // 从环境变量获取API地址
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
   // 如果是本地路径，转换为API URL
   // 假设文件存储在 backend/output 目录
   const filename = filePath.split('/').pop().split('\\').pop()
-  return `http://localhost:8000/api/files/output/${filename}`
+  return `${apiBaseUrl}/api/files/output/${filename}`
 }
 
 // 获取文件名
