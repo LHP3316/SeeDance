@@ -45,6 +45,7 @@ output_video/
 .env
 .env.local
 .env.*.local
+backend/.env
 cookies.json
 config_schedule.yaml
 config_example.yaml
