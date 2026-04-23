@@ -524,14 +524,6 @@ class JimengWebVideoPlugin:
             # 逐个上传文件（即梦网页只支持单文件上传）
             file_input = self.page.query_selector('input[type="file"]')
             
-            # 即梦可能需要先点击上传区域才能激活文件选择
-            # 先尝试找到并点击上传按钮的视觉元素
-            upload_area = self.page.query_selector('[class*="upload"], [class*="add"], [class*="reference"]')
-            if upload_area:
-                logger.info("  尝试点击上传区域...")
-                upload_area.click()
-                self.page.wait_for_timeout(1000)
-            
             for idx, image_path in enumerate(image_paths, 1):
                 # 转换为绝对路径（Windows下必须是绝对路径）
                 abs_path = os.path.abspath(image_path)
@@ -550,17 +542,41 @@ class JimengWebVideoPlugin:
                 # 上传前：记录页面状态
                 logger.info(f"    上传前页面URL: {self.page.url}")
                 
-                # 方法1: 使用 set_input_files
+                # 先点击上传区域，激活文件选择器
+                logger.info("    尝试点击上传区域...")
+                upload_area = self.page.query_selector('[class*="upload"], [class*="add"], [class*="reference"], [class*="upload-area"]')
+                if upload_area:
+                    upload_area.click()
+                    self.page.wait_for_timeout(1000)
+                    logger.info("    ✓ 已点击上传区域")
+                else:
+                    logger.info("    未找到上传区域，直接上传")
+                
+                # 使用 Playwright 上传文件
                 try:
                     file_input.set_input_files(abs_path)
                     logger.info(f"    ✓ set_input_files 调用成功")
+                    
+                    # 手动触发 change 事件，确保即梦网页响应
+                    self.page.evaluate("""
+                        (inputElement) => {
+                            const event = new Event('change', { bubbles: true });
+                            inputElement.dispatchEvent(event);
+                            
+                            // 再触发 input 事件
+                            const inputEvent = new Event('input', { bubbles: true });
+                            inputElement.dispatchEvent(inputEvent);
+                        }
+                    """, file_input)
+                    logger.info("    ✓ 已手动触发 change 和 input 事件")
+                    
                 except Exception as e:
-                    logger.error(f"    ✗ set_input_files 调用失败: {e}")
+                    logger.error(f"    ✗ 上传失败: {e}")
                     raise
                 
                 # 等待上传完成
-                logger.info(f"    等待5秒让即梦处理上传...")
-                self.page.wait_for_timeout(5000)
+                logger.info(f"    等待8秒让即梦处理上传...")
+                self.page.wait_for_timeout(8000)
                 
                 # 上传后：检查页面变化
                 logger.info(f"    上传后页面URL: {self.page.url}")
@@ -569,15 +585,20 @@ class JimengWebVideoPlugin:
                 temp_images = self.page.query_selector_all('img')
                 logger.info(f"    页面中img元素数量: {len(temp_images)}")
                 
+                # 检查是否检测到新上传的图片（通过查找包含blob或data的图片）
+                blob_images = self.page.query_selector_all('img[src*="blob:"]')
+                data_images = self.page.query_selector_all('img[src*="data:"]')
+                logger.info(f"    blob URL图片: {len(blob_images)}, data URL图片: {len(data_images)}")
+                
                 # 检查是否有错误提示
                 error_elements = self.page.query_selector_all('[class*="error"], [class*="fail"], [class*="alert"]')
                 if error_elements:
                     logger.warning(f"    ⚠ 检测到 {len(error_elements)} 个错误提示元素")
                 
-                # 检查是否检测到新上传的图片（通过查找包含blob或data的图片）
-                blob_images = self.page.query_selector_all('img[src*="blob:"]')
-                data_images = self.page.query_selector_all('img[src*="data:"]')
-                logger.info(f"    blob URL图片: {len(blob_images)}, data URL图片: {len(data_images)}")
+                # 检查是否找到上传成功的图片预览
+                preview_elements = self.page.query_selector_all('[class*="preview"], [class*="thumbnail"], [class*="uploaded"]')
+                if preview_elements:
+                    logger.info(f"    ✓ 检测到 {len(preview_elements)} 个图片预览元素")
                 
                 logger.info(f"  ✓ 第 {idx} 张图片上传完成\n")
             
