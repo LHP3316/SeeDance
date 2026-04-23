@@ -498,11 +498,28 @@ class JimengWebVideoPlugin:
         uploaded_elements = []
         
         try:
+            logger.info("[4/6] 上传图片...")
+            logger.info(f"  待上传图片数量: {len(image_paths)}")
+            
+            # 打印当前页面的URL
+            logger.info(f"  当前页面URL: {self.page.url}")
+            
             # 查找上传按钮
             upload_button = self.page.query_selector('input[type="file"]')
             
             if not upload_button:
+                logger.error("✗ 未找到上传按钮 input[type='file']")
+                # 尝试打印页面中的所有input元素
+                all_inputs = self.page.query_selector_all('input')
+                logger.info(f"  页面中找到 {len(all_inputs)} 个input元素:")
+                for i, inp in enumerate(all_inputs[:10], 1):
+                    input_type = inp.get_attribute('type') or 'unknown'
+                    input_id = inp.get_attribute('id') or 'no-id'
+                    input_class = inp.get_attribute('class') or 'no-class'
+                    logger.info(f"    [{i}] type={input_type}, id={input_id}, class={input_class}")
                 raise Exception("未找到上传按钮")
+            
+            logger.info("  ✓ 找到上传按钮 input[type='file']")
             
             # 逐个上传文件（即梦网页只支持单文件上传）
             file_input = self.page.query_selector('input[type="file"]')
@@ -517,41 +534,90 @@ class JimengWebVideoPlugin:
                     raise Exception(f"文件不存在: {abs_path}")
                 
                 file_size = os.path.getsize(abs_path)
-                logger.info(f"正在上传第 {idx}/{len(image_paths)} 张图片")
-                logger.info(f"  文件名: {os.path.basename(abs_path)}")
-                logger.info(f"  完整路径: {abs_path}")
-                logger.info(f"  文件大小: {file_size / 1024:.2f} KB")
+                logger.info(f"\n  [{idx}/{len(image_paths)}] 开始上传图片:")
+                logger.info(f"    文件名: {os.path.basename(abs_path)}")
+                logger.info(f"    完整路径: {abs_path}")
+                logger.info(f"    文件大小: {file_size / 1024:.2f} KB")
+                
+                # 上传前：记录页面状态
+                logger.info(f"    上传前页面URL: {self.page.url}")
                 
                 # 使用 Playwright 上传文件
-                file_input.set_input_files(abs_path)
+                try:
+                    file_input.set_input_files(abs_path)
+                    logger.info(f"    ✓ set_input_files 调用成功")
+                except Exception as e:
+                    logger.error(f"    ✗ set_input_files 调用失败: {e}")
+                    raise
                 
                 # 等待上传完成
+                logger.info(f"    等待3秒让即梦处理上传...")
                 self.page.wait_for_timeout(3000)
-                logger.info(f"  ✓ 第 {idx} 张图片上传完成")
+                
+                # 上传后：检查页面变化
+                logger.info(f"    上传后页面URL: {self.page.url}")
+                
+                # 尝试查找页面上的图片元素
+                temp_images = self.page.query_selector_all('img')
+                logger.info(f"    页面中img元素数量: {len(temp_images)}")
+                
+                # 检查是否有错误提示
+                error_elements = self.page.query_selector_all('[class*="error"], [class*="fail"], [class*="alert"]')
+                if error_elements:
+                    logger.warning(f"    ⚠ 检测到 {len(error_elements)} 个错误提示元素")
+                
+                logger.info(f"  ✓ 第 {idx} 张图片上传完成\n")
             
-            logger.info(f"已成功上传 {len(image_paths)} 张图片")
-            time.sleep(5)  # 等待上传完成
+            logger.info(f"\n✓ 已成功上传 {len(image_paths)} 张图片")
             
-            # 等待图片上传完成后，查找页面上的图片元素
-            # 即梦会显示上传的图片缩略图
-            self.page.wait_for_timeout(5000)
+            # 等待即梦网页处理所有图片
+            logger.info("等待8秒让即梦处理和显示所有图片...")
+            time.sleep(8)
             
-            # 尝试获取上传的图片元素（根据实际网页结构调整选择器）
-            # 通常会有图片预览区域
-            image_elements = self.page.query_selector_all('.image-preview, .upload-item, [class*="image"]')
+            # 尝试获取上传的图片元素
+            logger.info("检测页面上的图片元素...")
+            self.page.wait_for_timeout(3000)
             
-            if image_elements:
-                logger.info(f"检测到 {len(image_elements)} 个图片元素")
-                uploaded_elements = image_elements
+            # 尝试多种选择器来检测上传的图片
+            selectors = [
+                '.image-preview',
+                '.upload-item', 
+                '[class*="image"]',
+                '[class*="upload"]',
+                'img[src*="blob:"]',
+                'img[src*="data:"]',
+                '[class*="preview"]'
+            ]
+            
+            for selector in selectors:
+                elements = self.page.query_selector_all(selector)
+                if elements:
+                    logger.info(f"  选择器 '{selector}' 找到 {len(elements)} 个元素")
+                    if not uploaded_elements:
+                        uploaded_elements = elements
+            
+            if uploaded_elements:
+                logger.info(f"✓ 检测到 {len(uploaded_elements)} 个图片元素")
             else:
-                logger.warning("未检测到图片元素，将继续执行")
+                logger.warning("⚠ 未检测到图片元素，但上传可能已成功，将继续执行")
+                # 截图保存当前页面状态，便于调试
+                screenshot_path = os.path.join(os.path.dirname(__file__), 'upload_debug.png')
+                self.page.screenshot(path=screenshot_path)
+                logger.info(f"  已保存页面截图到: {screenshot_path}")
             
             return uploaded_elements
             
         except Exception as e:
-            logger.error(f"上传图片失败: {e}")
+            logger.error(f"✗ 上传图片失败: {e}")
             import traceback
             traceback.print_exc()
+            # 失败时也截图
+            try:
+                screenshot_path = os.path.join(os.path.dirname(__file__), 'upload_error.png')
+                self.page.screenshot(path=screenshot_path)
+                logger.info(f"  已保存错误截图到: {screenshot_path}")
+            except:
+                pass
             raise
     
     def _select_model(self, model_name: str):
