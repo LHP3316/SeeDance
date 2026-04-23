@@ -437,23 +437,23 @@ class JimengWebVideoPlugin:
                 image_paths=image_paths
             )
             
-            # 6. 点击生成并等待
-            logger.info("[6/6] 开始生成视频...")
-            generate_result = self._click_generate_and_wait(
-                timeout=timeout, 
-                output_dir=output_dir,
-                on_history_id_captured=on_history_id_captured
-            )
+            # # 6. 点击生成并等待
+            # logger.info("[6/6] 开始生成视频...")
+            # generate_result = self._click_generate_and_wait(
+            #     timeout=timeout, 
+            #     output_dir=output_dir,
+            #     on_history_id_captured=on_history_id_captured
+            # )
             
-            if generate_result and generate_result.get("video_url"):
-                result["success"] = True
-                result["video_url"] = generate_result["video_url"]
-                result["history_record_id"] = generate_result.get("history_record_id")
-                logger.info(f"视频生成成功: {generate_result['video_url']}")
-                logger.info(f"history_record_id: {generate_result.get('history_record_id')}")
-            else:
-                result["error"] = "视频生成失败，未获取到视频URL"
-                logger.error(result["error"])
+            # if generate_result and generate_result.get("video_url"):
+            #     result["success"] = True
+            #     result["video_url"] = generate_result["video_url"]
+            #     result["history_record_id"] = generate_result.get("history_record_id")
+            #     logger.info(f"视频生成成功: {generate_result['video_url']}")
+            #     logger.info(f"history_record_id: {generate_result.get('history_record_id')}")
+            # else:
+            #     result["error"] = "视频生成失败，未获取到视频URL"
+            #     logger.error(result["error"])
             
         except Exception as e:
             result["error"] = str(e)
@@ -1024,6 +1024,23 @@ class JimengWebVideoPlugin:
                         self.page.keyboard.press('ArrowDown')
                         time.sleep(0.5)
                 
+                # 重要：在按回车前，使用JavaScript阻止contenteditable的回车提交行为
+                self.page.evaluate("""
+                    () => {
+                        const inputs = document.querySelectorAll('div[contenteditable="true"]');
+                        inputs.forEach(input => {
+                            // 临时阻止回车键的默认行为
+                            const handler = (e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }
+                            };
+                            input.addEventListener('keydown', handler, { once: true });
+                        });
+                    }
+                """)
+                
                 # 选择图片：使用回车键选择（必须）
                 self.page.keyboard.press('Enter')
                 time.sleep(3)
@@ -1046,10 +1063,10 @@ class JimengWebVideoPlugin:
             
             logger.info("提示词输入完成")
             
-            # # 移除输入框焦点（暂时注释，测试自动提交）
-            # self.page.keyboard.press('Escape')
-            # logger.info("✓ 已移除输入框焦点")
-            # time.sleep(100000000000000000)
+            # 移除输入框焦点，避免后续操作意外触发提交
+            self.page.keyboard.press('Escape')
+            logger.info("✓ 已移除输入框焦点")
+            time.sleep(100000000000000000)
             
             # # 2. 选择模型（即梦使用的是自定义下拉选择器）
             # logger.info(f"选择模型: {model}")
