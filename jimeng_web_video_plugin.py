@@ -477,7 +477,7 @@ class JimengWebVideoPlugin:
             logger.info(f"导航到视频生成页面: {video_gen_url}")
             
             self.page.goto(video_gen_url, wait_until="domcontentloaded", timeout=30000)
-            self.page.wait_for_timeout(3000)  # 等待页面加载完成
+            self.page.wait_for_timeout(15000)  # 等待页面加载完成
             
             logger.info("已成功进入视频生成页面")
                 
