@@ -1,8 +1,11 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+// 从环境变量获取API地址，如果没有则使用相对路径
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+
 const request = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 30000
 })
 
