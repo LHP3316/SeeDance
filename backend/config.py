@@ -7,9 +7,9 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
     DB_HOST: str = "localhost"
     DB_PORT: int = 3306
-    DB_USER: str = "seedance"
-    DB_PASSWORD: str = "seedance123"
-    DB_NAME: str = "seedance_db"
+    DB_USER: str = "root"
+    DB_PASSWORD: str = "root"
+    DB_NAME: str = "seedance_backend"
     SECRET_KEY: str = "your-secret-key-here-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
