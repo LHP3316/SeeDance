@@ -891,8 +891,13 @@ class TaskExecutor:
         try:
             # 如果是相对路径，补全为完整URL
             if file_url.startswith('/'):
-                # 从 backend/.env 或配置文件读取后端地址
-                backend_url = "http://localhost:8000"
+                # 从环境变量或配置读取后端地址
+                # 优先使用 VITE_API_BASE_URL_upload 环境变量
+                import os
+                backend_url = os.getenv('VITE_API_BASE_URL_upload') or os.getenv('VITE_API_BASE_URL') or "http://localhost:8000"
+                # 如果环境变量包含 http:// 或 https://，直接使用；否则添加 http://
+                if not backend_url.startswith('http://') and not backend_url.startswith('https://'):
+                    backend_url = f"http://{backend_url}"
                 full_url = f"{backend_url}{file_url}"
             else:
                 full_url = file_url
@@ -905,8 +910,12 @@ class TaskExecutor:
             temp_dir = self.output_dir / "temp_materials"
             temp_dir.mkdir(exist_ok=True)
             
-            # 使用素材名称作为文件名
-            safe_name = "".join(c for c in material_name if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+            # 使用素材名称作为文件名（移除中文，避免Windows路径问题）
+            import re
+            # 只保留英文、数字、下划线、横杠和点
+            safe_name = re.sub(r'[^a-zA-Z0-9_.\-]', '_', material_name)
+            if not safe_name:
+                safe_name = f"material_{int(datetime.now().timestamp())}"
             filepath = temp_dir / safe_name
             
             # 保存文件
