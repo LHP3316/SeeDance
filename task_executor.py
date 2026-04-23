@@ -1102,9 +1102,31 @@ class TaskExecutor:
             # 获取生成的文件列表
             output_files = result.get('saved_files', []) or result.get('saved_file', '')
             if isinstance(output_files, list):
-                output_files_json = json.dumps(output_files, ensure_ascii=False)
+                # 将绝对路径转换为相对路径（从/output开始）
+                relative_files = []
+                for file_path in output_files:
+                    # 查找 /output 的位置
+                    output_index = file_path.find('/output')
+                    if output_index != -1:
+                        # 提取从 /output 开始的相对路径
+                        relative_path = file_path[output_index:]
+                        # 将 Windows 路径分隔符转换为 Unix 风格
+                        relative_path = relative_path.replace('\\', '/')
+                        relative_files.append(relative_path)
+                    else:
+                        # 如果没有找到 /output，直接使用文件名
+                        filename = file_path.split('/')[-1].split('\\')[-1]
+                        relative_files.append(f'/output/{filename}')
+                output_files_json = json.dumps(relative_files, ensure_ascii=False)
             elif output_files:
-                output_files_json = json.dumps([output_files], ensure_ascii=False)
+                # 单个文件路径
+                output_index = output_files.find('/output')
+                if output_index != -1:
+                    relative_path = output_files[output_index:].replace('\\', '/')
+                    output_files_json = json.dumps([relative_path], ensure_ascii=False)
+                else:
+                    filename = output_files.split('/')[-1].split('\\')[-1]
+                    output_files_json = json.dumps([f'/output/{filename}'], ensure_ascii=False)
             else:
                 output_files_json = None
             
@@ -1116,13 +1138,14 @@ class TaskExecutor:
                 duration_seconds=duration,
                 history_id=result.get("history_id"),
                 error_message=result.get("error"),
-                output_files=output_files_json  # 保存生成的文件路径JSON
+                output_files=output_files_json  # 保存生成的文件路径JSON（相对路径）
             )
             
             session.add(execution)
             session.commit()
             
             logger.info(f"执行日志已保存 [Task:{task.id}, Execution:{execution.id}]")
+            logger.info(f"保存的文件路径: {output_files_json}")
             
         except Exception as e:
             session.rollback()
