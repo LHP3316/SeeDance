@@ -1024,25 +1024,43 @@ class JimengWebVideoPlugin:
                         self.page.keyboard.press('ArrowDown')
                         time.sleep(0.5)
                 
-                # 选择图片：不使用回车键（避免意外触发提交），改用空格键或点击
-                # 尝试使用空格键选择
-                self.page.keyboard.press('Space')
+                # 选择图片：使用点击而不是回车键，避免触发提交
+                # 尝试点击选择器中的第一项
+                selector_item = self.page.query_selector('div[class*="select"] li:first-child, [class*="dropdown"] li:first-child, [role="listbox"] [role="option"]:first-child')
+                if selector_item:
+                    selector_item.click()
+                    logger.info("✓ 点击选择图片")
+                else:
+                    # 如果找不到选择器元素，使用回车键作为后备
+                    logger.warning("未找到选择器元素，使用回车键")
+                    self.page.keyboard.press('Enter')
                 time.sleep(3)
                 
-                # 输入描述
-                self.page.keyboard.type(desc)
-                time.sleep(0.5)
+                # 输入描述：使用JavaScript直接插入，避免键盘事件
+                # 获取当前输入框的内容
+                current_text = prompt_input.inner_text()
+                # 构建新内容
+                new_text = current_text + desc
+                # 使用JavaScript设置内容
+                prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
+                logger.info(f"✓ 已输入描述: {desc}")
+                time.sleep(1)
                 
                 # 输入逗号（如果有）
                 if idx < len(matches) - 1 or pure_text:
-                    self.page.keyboard.type('，')
+                    current_text = prompt_input.inner_text()
+                    new_text = current_text + '，'
+                    prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
                     time.sleep(0.5)
             
-            # 5. 输入纯文本部分
+            # 5. 输入纯文本部分：使用JavaScript直接设置，避免键盘触发
             if pure_text:
                 logger.info(f"输入纯文本: {pure_text}")
-                self.page.keyboard.type(pure_text)
-                time.sleep(15)
+                current_text = prompt_input.inner_text()
+                new_text = current_text + pure_text
+                prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
+                logger.info("✓ 纯文本输入完成")
+                time.sleep(3)
             
             logger.info("提示词输入完成")
             
