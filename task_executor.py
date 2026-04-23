@@ -711,27 +711,53 @@ class TaskExecutor:
             if rows:
                 logger.info(f"获取到 {len(rows)} 个图片素材（图生视频）")
                 
-                # 下载图片到本地
-                for row in rows:
+                # 从提示词中提取图片引用的顺序
+                import re
+                # 匹配所有 @文件名 的引用，保持出现顺序
+                prompt_image_order = re.findall(r'@([^\s，,。；;]+)', task.prompt)
+                logger.info(f"提示词中图片引用顺序: {prompt_image_order}")
+                
+                # 根据提示词中的顺序重新排序rows
+                ordered_rows = []
+                remaining_rows = list(rows)
+                
+                for ref_name in prompt_image_order:
+                    # 在remaining_rows中查找匹配的reference_name
+                    for i, row in enumerate(remaining_rows):
+                        if row[1] == ref_name:  # row[1] 是 reference_name
+                            ordered_rows.append(row)
+                            remaining_rows.pop(i)
+                            break
+                
+                # 添加未在提示词中引用的图片（如果有）
+                ordered_rows.extend(remaining_rows)
+                
+                # 下载图片到本地（按提示词中的顺序）
+                for idx, row in enumerate(ordered_rows, 1):
                     image_id = row[0]
                     reference_name = row[1]
                     file_url = row[2]
                     
-                    logger.info(f"下载图片素材: {reference_name} ({file_url})")
+                    logger.info(f"[{idx}/{len(ordered_rows)}] 下载图片素材: {reference_name} (ID: {image_id})")
                     
-                    local_path = self._download_material_image(file_url, reference_name)
+                    # 下载图片，传入序号以保证文件名唯一
+                    local_path = self._download_material_image(file_url, reference_name, image_id, idx)
                     if local_path:
                         local_image_paths.append(local_path)
-                        logger.info(f"  ✓ 图片已下载: {local_path}")
+                        logger.info(f"  ✓ 图片已下载: {os.path.basename(local_path)}")
                     else:
                         logger.error(f"  ✗ 图片下载失败: {reference_name}")
                 
-                if len(local_image_paths) != len(rows):
-                    result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(rows)})"
+                if len(local_image_paths) != len(ordered_rows):
+                    result["error"] = f"部分图片素材下载失败 ({len(local_image_paths)}/{len(ordered_rows)})"
                     logger.error(result["error"])
                     return result
                 
                 logger.info(f"成功下载 {len(local_image_paths)} 张参考图片")
+                # 打印下载后的图片路径列表（验证顺序）
+                logger.info("下载后的图片路径顺序（按提示词中@引用顺序）:")
+                for i, path in enumerate(local_image_paths, 1):
+                    logger.info(f"  [{i}] {os.path.basename(path)}")
             else:
                 logger.info("未检测到图片素材（文生视频模式）")
             
@@ -885,13 +911,15 @@ class TaskExecutor:
             logger.error(f"下载图片失败: {e}")
             return None
     
-    def _download_material_image(self, file_url: str, material_name: str) -> Optional[str]:
+    def _download_material_image(self, file_url: str, material_name: str, image_id: int, sort_order: int) -> Optional[str]:
         """
         下载素材图片到临时目录
         
         Args:
             file_url: 素材文件URL（相对路径，如 /uploads/materials/xxx.png）
             material_name: 素材名称
+            image_id: 素材ID
+            sort_order: 排序序号（1, 2, 3...）
             
         Returns:
             保存的文件路径
@@ -920,13 +948,18 @@ class TaskExecutor:
             temp_dir = self.output_dir / "temp_materials"
             temp_dir.mkdir(exist_ok=True)
             
-            # 使用素材名称作为文件名（移除中文，避免Windows路径问题）
+            # 使用序号+素材ID作为文件名，确保唯一性和顺序
+            # 格式：01_img123_素材名.png
             import re
-            # 只保留英文、数字、下划线、横杠和点
+            # 获取文件扩展名
+            ext = os.path.splitext(file_url)[1] or '.png'
+            # 处理素材名称，移除中文
             safe_name = re.sub(r'[^a-zA-Z0-9_.\-]', '_', material_name)
-            if not safe_name:
-                safe_name = f"material_{int(datetime.now().timestamp())}"
-            filepath = temp_dir / safe_name
+            if not safe_name or safe_name == '_':
+                safe_name = f"image{image_id}"
+            # 组合文件名：序号_img素材ID_素材名.扩展名
+            filename = f"{sort_order:02d}_img{image_id}_{safe_name}{ext}"
+            filepath = temp_dir / filename
             
             # 保存文件
             with open(filepath, 'wb') as f:
