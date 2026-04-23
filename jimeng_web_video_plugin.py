@@ -1025,8 +1025,7 @@ class JimengWebVideoPlugin:
                         time.sleep(0.5)
                 
                 # 选择图片：不使用回车键（避免意外触发提交），改用空格键或点击
-                # 尝试使用空格键选择
-                self.page.keyboard.press('Space')
+                self.page.keyboard.press('Enter')
                 time.sleep(3)
                 
                 # 输入描述
