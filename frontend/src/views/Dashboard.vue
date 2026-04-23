@@ -87,8 +87,8 @@
           <div class="material-grid" v-if="recentMaterials.length">
             <div class="material-item" v-for="item in recentMaterials" :key="item.id">
               <div class="material-preview">
-                <img v-if="item.type === 'image'" :src="item.file_url" :alt="item.name" />
-                <video v-else :src="item.file_url" muted></video>
+                <img v-if="item.type === 'image'" :src="getImageUrl(item.file_url)" :alt="item.name" />
+                <video v-else :src="getImageUrl(item.file_url)" muted></video>
               </div>
               <div class="material-info">
                 <div class="name" :title="item.name">{{ item.name }}</div>
@@ -211,6 +211,16 @@ const statusTagType = (status) => {
 
 const goTo = (path) => {
   router.push(path)
+}
+
+const getImageUrl = (url) => {
+  if (!url) return ''
+  // 从环境变量获取API地址
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
+  
+  if (url.startsWith('/uploads/')) return `${apiBaseUrl}${url}`
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  return `${apiBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
 onMounted(loadDashboard)
