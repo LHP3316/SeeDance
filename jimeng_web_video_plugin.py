@@ -1024,59 +1024,46 @@ class JimengWebVideoPlugin:
                         self.page.keyboard.press('ArrowDown')
                         time.sleep(0.5)
                 
-                # 选择图片：使用点击而不是回车键，避免触发提交
-                # 尝试点击选择器中的第一项
-                selector_item = self.page.query_selector('div[class*="select"] li:first-child, [class*="dropdown"] li:first-child, [role="listbox"] [role="option"]:first-child')
-                if selector_item:
-                    selector_item.click()
-                    logger.info("✓ 点击选择图片")
-                else:
-                    # 如果找不到选择器元素，使用回车键作为后备
-                    logger.warning("未找到选择器元素，使用回车键")
-                    self.page.keyboard.press('Enter')
+                # 选择图片：不使用回车键（避免意外触发提交），改用空格键或点击
+                # 尝试使用空格键选择
+                self.page.keyboard.press('Space')
                 time.sleep(3)
                 
-                # 输入描述：使用JavaScript直接插入，避免键盘事件
-                # 获取当前输入框的内容
-                current_text = prompt_input.inner_text()
-                # 构建新内容
-                new_text = current_text + desc
-                # 使用JavaScript设置内容
-                prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
-                logger.info(f"✓ 已输入描述: {desc}")
-                time.sleep(1)
+                # 输入描述
+                self.page.keyboard.type(desc)
+                time.sleep(0.5)
                 
                 # 输入逗号（如果有）
                 if idx < len(matches) - 1 or pure_text:
-                    current_text = prompt_input.inner_text()
-                    new_text = current_text + '，'
-                    prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
+                    self.page.keyboard.type('，')
                     time.sleep(0.5)
             
-            # 5. 输入纯文本部分：使用JavaScript直接设置，避免键盘触发
+            # 5. 输入纯文本部分
             if pure_text:
                 logger.info(f"输入纯文本: {pure_text}")
-                current_text = prompt_input.inner_text()
-                new_text = current_text + pure_text
-                prompt_input.evaluate(f'element => {{ element.innerText = `{new_text}`; }}')
-                logger.info("✓ 纯文本输入完成")
-                time.sleep(3)
+                self.page.keyboard.type(pure_text)
+                time.sleep(15)
             
             logger.info("提示词输入完成")
             
-            # 2. 选择模型（即梦使用的是自定义下拉选择器）
-            logger.info(f"选择模型: {model}")
-            self._select_model(model)
+            # 移除输入框焦点，避免后续操作意外触发提交
+            self.page.keyboard.press('Escape')
+            logger.info("✓ 已移除输入框焦点")
+            time.sleep(100000000000000000)
             
-            # 3. 选择比例（4:3）
-            logger.info(f"选择比例: {ratio}")
-            self._select_ratio(ratio)
-            time.sleep(15)  # 等待比例选择完成
+            # # 2. 选择模型（即梦使用的是自定义下拉选择器）
+            # logger.info(f"选择模型: {model}")
+            # self._select_model(model)
             
-            # 4. 选择时长（如 4s）
-            logger.info(f"选择时长: {duration}")
-            self._select_duration(duration)
-            time.sleep(15)  # 等待时长选择完成
+            # # 3. 选择比例（4:3）
+            # logger.info(f"选择比例: {ratio}")
+            # self._select_ratio(ratio)
+            # time.sleep(15)  # 等待比例选择完成
+            
+            # # 4. 选择时长（如 4s）
+            # logger.info(f"选择时长: {duration}")
+            # self._select_duration(duration)
+            # time.sleep(15)  # 等待时长选择完成
             
         except Exception as e:
             logger.error(f"设置生成参数失败: {e}")
