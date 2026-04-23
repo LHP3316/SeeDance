@@ -169,9 +169,9 @@ class TaskExecutor:
         self.web_plugin = None
         self.web_plugin_enabled = False  # 是否启用插件模式
         
-        # 输出目录
-        self.output_dir = Path(__file__).parent / "output"
-        self.output_dir.mkdir(exist_ok=True)
+        # 输出目录 - 保存到项目根目录的 uploads/output
+        self.output_dir = Path(__file__).parent / "uploads" / "output"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info("=" * 60)
         logger.info("任务执行器初始化完成")
@@ -1100,31 +1100,31 @@ class TaskExecutor:
             # 获取生成的文件列表
             output_files = result.get('saved_files', []) or result.get('saved_file', '')
             if isinstance(output_files, list):
-                # 将绝对路径转换为相对路径（从/output开始）
+                # 将绝对路径转换为相对路径（从/uploads/output开始）
                 relative_files = []
                 for file_path in output_files:
-                    # 查找 /output 的位置
-                    output_index = file_path.find('/output')
-                    if output_index != -1:
-                        # 提取从 /output 开始的相对路径
-                        relative_path = file_path[output_index:]
+                    # 查找 /uploads/output 的位置
+                    uploads_output_index = file_path.find('/uploads/output')
+                    if uploads_output_index != -1:
+                        # 提取从 /uploads/output 开始的相对路径
+                        relative_path = file_path[uploads_output_index:]
                         # 将 Windows 路径分隔符转换为 Unix 风格
                         relative_path = relative_path.replace('\\', '/')
                         relative_files.append(relative_path)
                     else:
-                        # 如果没有找到 /output，直接使用文件名
+                        # 如果没有找到 /uploads/output，直接使用文件名
                         filename = file_path.split('/')[-1].split('\\')[-1]
-                        relative_files.append(f'/output/{filename}')
+                        relative_files.append(f'/uploads/output/{filename}')
                 output_files_json = json.dumps(relative_files, ensure_ascii=False)
             elif output_files:
                 # 单个文件路径
-                output_index = output_files.find('/output')
-                if output_index != -1:
-                    relative_path = output_files[output_index:].replace('\\', '/')
+                uploads_output_index = output_files.find('/uploads/output')
+                if uploads_output_index != -1:
+                    relative_path = output_files[uploads_output_index:].replace('\\', '/')
                     output_files_json = json.dumps([relative_path], ensure_ascii=False)
                 else:
                     filename = output_files.split('/')[-1].split('\\')[-1]
-                    output_files_json = json.dumps([f'/output/{filename}'], ensure_ascii=False)
+                    output_files_json = json.dumps([f'/uploads/output/{filename}'], ensure_ascii=False)
             else:
                 output_files_json = None
             
