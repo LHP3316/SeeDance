@@ -859,10 +859,9 @@ class TaskExecutor:
             response = requests.get(url, timeout=120)
             response.raise_for_status()
             
-            # 生成文件名
+            # 生成文件名（不使用任务名称，避免中文路径问题）
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_name = "".join(c for c in task_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            filename = f"task{task_id}_{safe_name}_{timestamp}_{index}.png"
+            filename = f"task{task_id}_{timestamp}_{index}.png"
             filepath = self.output_dir / filename
             
             # 保存文件
@@ -1022,10 +1021,9 @@ class TaskExecutor:
             response = requests.get(url, stream=True, timeout=300)
             response.raise_for_status()
             
-            # 生成文件名
+            # 生成文件名（不使用任务名称，避免中文路径问题）
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_name = "".join(c for c in task_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            filename = f"task{task_id}_{safe_name}_{timestamp}.mp4"
+            filename = f"task{task_id}_{timestamp}.mp4"
             filepath = self.output_dir / filename
             
             # 流式下载
