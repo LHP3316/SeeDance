@@ -18,10 +18,24 @@
         <el-table-column prop="status" label="状态" width="100" />
         <el-table-column prop="model" label="模型" width="150" />
         <el-table-column prop="created_at" label="创建时间" width="180" />
-        <el-table-column label="操作" width="100">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
-            <!-- <el-button size="small" @click="handleRun(row.id)">执行</el-button> -->
-            <el-button type="danger" size="small" @click="handleDelete(row.id)">删除</el-button>
+            <el-button 
+              v-if="row.status === 'completed'" 
+              type="primary" 
+              size="small" 
+              @click="handleViewResult(row)"
+            >
+              查看结果
+            </el-button>
+            <el-button 
+              type="danger" 
+              size="small" 
+              :disabled="row.status !== 'pending'"
+              @click="handleDelete(row.id)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -330,6 +344,74 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 查看结果对话框 -->
+    <el-dialog
+      v-model="resultDialogVisible"
+      :title="`任务结果 - ${currentTask?.name || ''}`"
+      width="900px"
+    >
+      <div v-if="currentTask" class="result-container">
+        <!-- 任务信息 -->
+        <div class="task-info">
+          <el-tag :type="getStatusTagType(currentTask.status)">{{ getStatusText(currentTask.status) }}</el-tag>
+          <span class="task-type">任务类型: {{ currentTask.type === 'image' ? '图片' : '视频' }}</span>
+          <span class="task-model">模型: {{ currentTask.model }}</span>
+        </div>
+
+        <!-- 生成的图片 -->
+        <div v-if="currentTask.output_images && currentTask.output_images.length > 0" class="result-section">
+          <h4>生成的图片 ({{ currentTask.output_images.length }})</h4>
+          <div class="image-grid">
+            <div 
+              v-for="(img, index) in currentTask.output_images" 
+              :key="index" 
+              class="image-item"
+            >
+              <el-image
+                :src="getFileUrl(img)"
+                :preview-src-list="currentTask.output_images.map(f => getFileUrl(f))"
+                :initial-index="index"
+                fit="cover"
+                class="result-image"
+              />
+              <div class="image-name">{{ getFileName(img) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 生成的视频 -->
+        <div v-if="currentTask.output_videos && currentTask.output_videos.length > 0" class="result-section">
+          <h4>生成的视频 ({{ currentTask.output_videos.length }})</h4>
+          <div class="video-grid">
+            <div 
+              v-for="(video, index) in currentTask.output_videos" 
+              :key="index" 
+              class="video-item"
+            >
+              <video 
+                :src="getFileUrl(video)" 
+                controls 
+                class="result-video"
+              >
+                您的浏览器不支持视频播放
+              </video>
+              <div class="video-name">{{ getFileName(video) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 无结果提示 -->
+        <div v-if="(!currentTask.output_images || currentTask.output_images.length === 0) && (!currentTask.output_videos || currentTask.output_videos.length === 0)" class="no-result">
+          <el-icon :size="60" color="#909399"><FolderOpened /></el-icon>
+          <p>暂无生成结果</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="resultDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -337,11 +419,15 @@
 import { ref, onMounted } from 'vue'
 import { getTasks, deleteTask, runTask, createTask } from '@/api/task'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Close, Picture } from '@element-plus/icons-vue'
+import { Plus, Close, Picture, FolderOpened } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const creating = ref(false)
 const taskList = ref([])
+
+// 查看结果相关
+const resultDialogVisible = ref(false)
+const currentTask = ref(null)
 
 // 图片任务相关
 const imageDialogVisible = ref(false)
@@ -813,6 +899,53 @@ const handleDelete = async (id) => {
   fetchTasks()
 }
 
+// 查看任务结果
+const handleViewResult = (task) => {
+  currentTask.value = task
+  resultDialogVisible.value = true
+}
+
+// 获取文件URL
+const getFileUrl = (filePath) => {
+  // 如果是完整URL，直接返回
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath
+  }
+  // 如果是本地路径，转换为API URL
+  // 假设文件存储在 backend/output 目录
+  const filename = filePath.split('/').pop().split('\\').pop()
+  return `http://localhost:8000/api/files/output/${filename}`
+}
+
+// 获取文件名
+const getFileName = (filePath) => {
+  return filePath.split('/').pop().split('\\').pop()
+}
+
+// 获取状态标签类型
+const getStatusTagType = (status) => {
+  const map = {
+    pending: 'info',
+    running: 'warning',
+    completed: 'success',
+    failed: 'danger',
+    queued: ''
+  }
+  return map[status] || 'info'
+}
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const map = {
+    pending: '待执行',
+    running: '执行中',
+    completed: '已完成',
+    failed: '失败',
+    queued: '排队中'
+  }
+  return map[status] || status
+}
+
 onMounted(() => {
   fetchTasks()
   
@@ -1030,6 +1163,119 @@ onMounted(() => {
 .empty-tip p {
   margin: 0;
   font-size: 14px;
+  color: #909399;
+}
+
+/* 结果查看样式 */
+.result-container {
+  padding: 10px;
+}
+
+.task-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+}
+
+.task-type,
+.task-model {
+  font-size: 14px;
+  color: #606266;
+}
+
+.result-section {
+  margin-bottom: 32px;
+}
+
+.result-section h4 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  border-bottom: 2px solid #409eff;
+  padding-bottom: 8px;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.image-item {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.image-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.result-image {
+  width: 100%;
+  height: 200px;
+  display: block;
+}
+
+.image-name {
+  padding: 8px;
+  font-size: 12px;
+  color: #606266;
+  background: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.video-item {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #000;
+}
+
+.result-video {
+  width: 100%;
+  height: 200px;
+  display: block;
+  background: #000;
+}
+
+.video-name {
+  padding: 8px;
+  font-size: 12px;
+  color: #606266;
+  background: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.no-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #909399;
+}
+
+.no-result p {
+  margin-top: 16px;
+  font-size: 16px;
   color: #909399;
 }
 </style>

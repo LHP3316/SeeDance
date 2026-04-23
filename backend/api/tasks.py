@@ -34,7 +34,40 @@ async def list_tasks(
         
         # 将Task对象转换为字典
         from schemas.task import TaskResponse
-        task_items = [TaskResponse.model_validate(task).model_dump() for task in tasks]
+        from models.task_execution import TaskExecution
+        import json
+        
+        task_items = []
+        for task in tasks:
+            task_dict = TaskResponse.model_validate(task).model_dump()
+            
+            # 如果任务已完成，获取执行结果
+            if task.status == TaskStatusEnum.completed:
+                # 查询最新的成功执行记录
+                execution = db.query(TaskExecution).filter(
+                    TaskExecution.task_id == task.id,
+                    TaskExecution.status == 'success'
+                ).order_by(TaskExecution.created_at.desc()).first()
+                
+                if execution and execution.output_files:
+                    try:
+                        # 解析output_files JSON
+                        output_files = json.loads(execution.output_files)
+                        task_dict['output_files'] = output_files
+                        
+                        # 区分图片和视频
+                        task_dict['output_images'] = [f for f in output_files if f.endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+                        task_dict['output_videos'] = [f for f in output_files if f.endswith(('.mp4', '.avi', '.mov'))]
+                    except:
+                        task_dict['output_files'] = []
+                        task_dict['output_images'] = []
+                        task_dict['output_videos'] = []
+                else:
+                    task_dict['output_files'] = []
+                    task_dict['output_images'] = []
+                    task_dict['output_videos'] = []
+            
+            task_items.append(task_dict)
         
         return {
             "total": total,
@@ -155,9 +188,9 @@ async def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     
-    # 执行中的任务不可删除
-    if task.status == TaskStatusEnum.running:
-        raise HTTPException(status_code=400, detail="执行中的任务不可删除")
+    # 只有pending状态的任务可以删除
+    if task.status != TaskStatusEnum.pending:
+        raise HTTPException(status_code=400, detail="只有待执行的任务可以删除")
     
     task.is_deleted = True
     db.commit()

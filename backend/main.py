@@ -36,6 +36,11 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
+# 挂载输出文件目录（生成的图片和视频）
+OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/api/files/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
+
 
 @app.get("/")
 async def root() -> dict[str, str]:
