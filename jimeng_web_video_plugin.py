@@ -1041,7 +1041,7 @@ class JimengWebVideoPlugin:
             if pure_text:
                 logger.info(f"输入纯文本: {pure_text}")
                 self.page.keyboard.type(pure_text)
-                time.sleep(0.5)
+                time.sleep(15)
             
             logger.info("提示词输入完成")
             
@@ -1052,12 +1052,12 @@ class JimengWebVideoPlugin:
             # 3. 选择比例（4:3）
             logger.info(f"选择比例: {ratio}")
             self._select_ratio(ratio)
-            time.sleep(3)  # 等待比例选择完成
+            time.sleep(15)  # 等待比例选择完成
             
             # 4. 选择时长（如 4s）
             logger.info(f"选择时长: {duration}")
             self._select_duration(duration)
-            time.sleep(3)  # 等待时长选择完成
+            time.sleep(15)  # 等待时长选择完成
             
         except Exception as e:
             logger.error(f"设置生成参数失败: {e}")
