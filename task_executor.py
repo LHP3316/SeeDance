@@ -711,11 +711,13 @@ class TaskExecutor:
             if rows:
                 logger.info(f"获取到 {len(rows)} 个图片素材（图生视频）")
                 
-                # 从提示词中提取图片引用的顺序
+                # 从提示词中提取图片引用的顺序（只提取文件名部分）
                 import re
-                # 匹配所有 @文件名 的引用，保持出现顺序
-                prompt_image_order = re.findall(r'@([^\s，,。；;]+)', task.prompt)
-                logger.info(f"提示词中图片引用顺序: {prompt_image_order}")
+                # 匹配 @文件名.扩展名 的引用，只提取文件名部分
+                # 例如：@6f1ccc4d-5326-44bf-a5f0-4d4d35165cc4b.png是包子铺内
+                # 提取：6f1ccc4d-5326-44bf-a5f0-4d4d35165cc4b.png
+                prompt_image_order = re.findall(r'@([^\s，,。；;]+?)(?:是|，|,|。|；|;|$)', task.prompt)
+                logger.info(f"提示词中图片引用顺序（文件名）: {prompt_image_order}")
                 
                 # 根据提示词中的顺序重新排序rows
                 ordered_rows = []
@@ -731,6 +733,10 @@ class TaskExecutor:
                 
                 # 添加未在提示词中引用的图片（如果有）
                 ordered_rows.extend(remaining_rows)
+                
+                logger.info(f"排序后的图片顺序:")
+                for i, row in enumerate(ordered_rows, 1):
+                    logger.info(f"  [{i}] {row[1]} (ID: {row[0]})")
                 
                 # 下载图片到本地（按提示词中的顺序）
                 for idx, row in enumerate(ordered_rows, 1):
