@@ -7,8 +7,22 @@ from models.task_image import TaskImage
 from schemas.task import TaskCreate, TaskUpdate, TaskResponse, ExecutionResponse
 from core.deps import get_current_user, require_admin
 from models.user import User
+from config import settings
 
 router = APIRouter(prefix="/tasks", tags=["任务管理"])
+
+
+def build_full_url(file_url: str) -> str:
+    """拼接完整的文件URL"""
+    if not file_url:
+        return ""
+    # 如果已经是完整URL，直接返回
+    if file_url.startswith('http://') or file_url.startswith('https://'):
+        return file_url
+    # 从配置中获取基础URL
+    base_url = settings.API_BASE_URL_UPLOAD or "http://127.0.0.1:8000"
+    # 拼接完整URL
+    return f"{base_url}{file_url}"
 
 
 @router.get("/", response_model=dict)
@@ -53,11 +67,14 @@ async def list_tasks(
                     try:
                         # 解析output_files JSON
                         output_files = json.loads(execution.output_files)
-                        task_dict['output_files'] = output_files
+                        
+                        # 拼接完整的文件URL
+                        output_files_full = [build_full_url(f) for f in output_files]
+                        task_dict['output_files'] = output_files_full
                         
                         # 区分图片和视频
-                        task_dict['output_images'] = [f for f in output_files if f.endswith(('.png', '.jpg', '.jpeg', '.gif'))]
-                        task_dict['output_videos'] = [f for f in output_files if f.endswith(('.mp4', '.avi', '.mov'))]
+                        task_dict['output_images'] = [f for f in output_files_full if f.endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+                        task_dict['output_videos'] = [f for f in output_files_full if f.endswith(('.mp4', '.avi', '.mov'))]
                     except:
                         task_dict['output_files'] = []
                         task_dict['output_images'] = []

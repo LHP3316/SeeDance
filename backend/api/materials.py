@@ -10,12 +10,26 @@ from core.deps import get_current_user
 from database import get_db
 from models.material import Material, MaterialSourceEnum, MaterialTypeEnum
 from schemas.material import MaterialListResponse, MaterialResponse
+from config import settings
 
 router = APIRouter(prefix="/materials", tags=["素材管理"])
 
 BASE_DIR = Path(__file__).parent.parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads" / "materials"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def build_full_url(file_url: str) -> str:
+    """拼接完整的文件URL"""
+    if not file_url:
+        return ""
+    # 如果已经是完整URL，直接返回
+    if file_url.startswith('http://') or file_url.startswith('https://'):
+        return file_url
+    # 从配置中获取基础URL
+    base_url = settings.API_BASE_URL_UPLOAD or "http://127.0.0.1:8000"
+    # 拼接完整URL
+    return f"{base_url}{file_url}"
 
 
 @router.get("/", response_model=MaterialListResponse)
@@ -35,11 +49,27 @@ async def list_materials(
     total = query.count()
     materials = query.order_by(Material.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
+    # 拼接完整的文件URL
+    materials_with_full_url = []
+    for material in materials:
+        material_dict = {
+            "id": material.id,
+            "name": material.name,
+            "type": material.type.value if hasattr(material.type, 'value') else material.type,
+            "file_url": build_full_url(material.file_url),
+            "file_path": material.file_path,
+            "source": material.source.value if hasattr(material.source, 'value') else material.source,
+            "task_id": material.task_id,
+            "created_by": material.created_by,
+            "created_at": material.created_at,
+        }
+        materials_with_full_url.append(material_dict)
+
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": materials,
+        "items": materials_with_full_url,
     }
 
 

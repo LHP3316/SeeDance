@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     SESSION_ID: Optional[str] = None
     MAX_FILE_SIZE: int = 52428800
+    API_BASE_URL_UPLOAD: Optional[str] = None  # 图片资源基础URL，从.env读取
     
     @property
     def resolved_database_url(self) -> str:

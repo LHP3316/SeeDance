@@ -122,7 +122,9 @@ import { Picture, VideoPlay, ZoomIn, Loading } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const materialList = ref([])
-const uploadUrl = 'http://localhost:8000/api/materials/upload'
+// 从环境变量获取API地址
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
+const uploadUrl = `${apiBaseUrl}/api/materials/upload`
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
 }
@@ -137,13 +139,8 @@ const previewUrl = ref('')
 const currentMaterial = ref(null)
 
 const getImageUrl = (url) => {
-  if (!url) return ''
-  // 从环境变量获取API地址
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
-  
-  if (url.startsWith('/uploads/')) return `${apiBaseUrl}${url}`
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  return `${apiBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`
+  // 后端已经返回完整URL，直接返回
+  return url || ''
 }
 
 const extractNameFromPath = (value) => {

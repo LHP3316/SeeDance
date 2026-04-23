@@ -214,13 +214,8 @@ const goTo = (path) => {
 }
 
 const getImageUrl = (url) => {
-  if (!url) return ''
-  // 从环境变量获取API地址
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
-  
-  if (url.startsWith('/uploads/')) return `${apiBaseUrl}${url}`
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  return `${apiBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`
+  // 后端已经返回完整URL，直接返回
+  return url || ''
 }
 
 onMounted(loadDashboard)

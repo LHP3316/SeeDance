@@ -907,18 +907,9 @@ const handleViewResult = (task) => {
   resultDialogVisible.value = true
 }
 
-// 获取文件URL
+// 获取文件URL（后端已返回完整URL）
 const getFileUrl = (filePath) => {
-  // 如果是完整URL，直接返回
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-    return filePath
-  }
-  // 从环境变量获取API地址
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-  // 如果是本地路径，转换为API URL
-  // 假设文件存储在 backend/output 目录
-  const filename = filePath.split('/').pop().split('\\').pop()
-  return `${apiBaseUrl}/api/files/output/${filename}`
+  return filePath || ''
 }
 
 // 获取文件名
