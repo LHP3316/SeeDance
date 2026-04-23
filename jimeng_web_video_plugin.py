@@ -576,7 +576,7 @@ class JimengWebVideoPlugin:
                 
                 # 等待上传完成
                 logger.info(f"    等待8秒让即梦处理上传...")
-                self.page.wait_for_timeout(8000)
+                self.page.wait_for_timeout(15000)
                 
                 # 上传后：检查页面变化
                 logger.info(f"    上传后页面URL: {self.page.url}")
