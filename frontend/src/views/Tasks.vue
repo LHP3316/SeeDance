@@ -432,9 +432,9 @@ const currentTask = ref(null)
 // 图片任务相关
 const imageDialogVisible = ref(false)
 const imageFormRef = ref(null)
-// 从环境变量获取API地址
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload || 'http://localhost:8000'
-const uploadUrl = `${apiBaseUrl}/api/materials/upload`
+// 优先使用环境变量中的上传地址，未配置时回退到相对路径
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL_upload
+const uploadUrl = apiBaseUrl ? `${apiBaseUrl}/api/materials/upload` : '/api/materials/upload'
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
 }
